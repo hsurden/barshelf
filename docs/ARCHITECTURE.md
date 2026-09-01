@@ -12,7 +12,7 @@ Sources/Barkeep/StatusBar/       three status items and icon rendering
 Sources/Barkeep/Accessibility/   permission checks, scans, and item moves
 Sources/Barkeep/Permissions/     guided Accessibility setup
 Sources/Barkeep/Storage/         versioned local JSON storage
-Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and updates
+Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and update policy
 Sources/Barkeep/UI/              settings and search windows
 Tests/BarkeepTests/              unit tests
 scripts/                         build, install, DMG, and release tools
@@ -31,7 +31,7 @@ scripts/                         build, install, DMG, and release tools
 | `TriggerCenter` | Own optional reveal and hide event sources | No | No |
 | `HotKeyCenter` | Register the two global keyboard shortcuts | No | No |
 | `MenuBarSpacingService` | Apply and restore macOS spacing preferences | No | No |
-| `UpdateService` | Keep Sparkle checks separate from core app startup | No | No |
+| `UpdateService` | Disable upstream binary updates for this personal fork | No | No |
 
 `AppCoordinator` is the only object that joins these parts. Views call coordinator methods. They
 do not scan the menu bar or post input themselves.
@@ -49,8 +49,9 @@ do not scan the menu bar or post input themselves.
 The engine uses two large status item lengths as section boundaries. The control item stays to the
 right. macOS keeps each status item's preferred position through its autosave name.
 
-All clicks, hotkeys, triggers, search actions, and menu commands call the coordinator. This gives
-authentication and the auto-hide timer one shared path.
+All clicks, hotkeys, triggers, picker actions, and menu commands call the coordinator. A normal
+control-item click opens the picker; Option-click and explicit reveal commands still use the shared
+authentication and auto-hide path.
 
 ## A safe item move has one fixed flow
 
@@ -113,23 +114,19 @@ Menu bar frames and Accessibility elements stay in memory. They are never writte
 - Tighter spacing changes two user-level macOS preferences. Barkeep records the old values and
   restores them when the setting is off.
 - Screen Recording is not used.
-- Network access is limited to the signed Sparkle update feed.
+- The core app needs no network access.
 
-## Releases keep updates outside the core engine
+## Updates cannot overwrite the personal fork
 
-The app target links Sparkle. `UpdateService` creates the updater only when the bundle has a feed
-URL and public EdDSA key. Scheduled checks stay quiet until the user opens Barkeep or an update is
-ready.
-
-Release builds use Developer ID signing, hardened runtime, Apple notarization, DMG stapling, and a
-SHA-256 checksum. The private signing material stays on the release Mac. GitHub receives only the
-signed DMG, checksum, public appcast, and release notes.
+The app target does not link an automatic updater. `UpdateService` is a disabled compatibility shim
+so upstream binaries cannot overwrite customized behavior. Upstream changes are fetched and
+reviewed as source. Any future public release path needs its own identity and signing design.
 
 ## Tests cover stable logic and launch safety
 
 The unit target checks boundary classification, product defaults, state persistence, observation,
-and icon rendering. CI also builds the app, checks the Sparkle framework, verifies the signature,
-and confirms that the process stays open after launch.
+and icon rendering. CI also builds the app, verifies the signature, and confirms that the process
+stays open after launch.
 
 Real menu bar moves need a signed app and Accessibility access. Test them manually with the same
 app archive that will ship. Source-only tests cannot prove that macOS completed a move.

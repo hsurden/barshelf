@@ -19,9 +19,12 @@ final class AppCoordinator: NSObject, ObservableObject {
 
     @Published private(set) var items: [MenuBarItemSnapshot] = []
     @Published private(set) var itemZones: [String: VisibilityZone] = [:]
+    @Published private(set) var overflowIDs: Set<String> = []
     @Published private(set) var isScanning = false
+    @Published private(set) var isApplyingOrder = false
     @Published private(set) var movingItemID: String?
     @Published var message: String?
+    var pendingSearchQuery = ""
 
     private let statusBar = StatusBarEngine()
     private let scanner = AccessibilityScanner()
@@ -30,12 +33,14 @@ final class AppCoordinator: NSObject, ObservableObject {
     private let hotKeys = HotKeyCenter()
     private var settingsWindow: SettingsWindowController?
     private var searchPanel: SearchPanelController?
+    private var shelfPanel: ShelfPanelController?
+    private var shelfClosedAt: Date?
     private var rehideTask: Task<Void, Never>?
     private var authenticationContext: LAContext?
     private var permissionObserver: NSObjectProtocol?
 
-    init(store: StateStore = StateStore()) {
-        self.store = store
+    init(store: StateStore? = nil) {
+        self.store = store ?? StateStore()
         super.init()
     }
 
@@ -50,7 +55,11 @@ final class AppCoordinator: NSObject, ObservableObject {
         triggers.onHide = { [weak self] in self?.hide() }
         hotKeys.onToggle = { [weak self] in
             guard let self else { return }
-            statusBar.state == .hidden ? requestReveal(all: false) : hide()
+            if menuBarMode == .overflowShelf {
+                toggleShelf()
+            } else {
+                statusBar.state == .hidden ? requestReveal(all: false) : hide()
+            }
         }
         hotKeys.onSearch = { [weak self] in self?.showSearch() }
         hotKeys.start()
@@ -69,13 +78,33 @@ final class AppCoordinator: NSObject, ObservableObject {
             }
         }
         settingsDidChange()
-        statusBar.hide()
+        if menuBarMode == .classic {
+            statusBar.hide()
+        }
     }
+
+    var menuBarMode: MenuBarMode { store.settings.mode }
 
     func settingsDidChange() {
         let settings = store.settings
+        statusBar.setMode(settings.mode)
+        if settings.mode == .classic {
+            shelfPanel?.close()
+        }
         statusBar.setIconStyle(settings.iconStyle)
-        triggers.update(settings: settings)
+        // Classic reveal triggers (hover, scroll, menu bar click, battery,
+        // display) would pop the Always hidden section open unexpectedly in
+        // shelf mode, so they are disarmed there.
+        var triggerSettings = settings
+        if settings.mode == .overflowShelf {
+            triggerSettings.showOnHover = false
+            triggerSettings.showOnScroll = false
+            triggerSettings.showOnMenuBarClick = false
+            triggerSettings.hideOnAppChange = false
+            triggerSettings.showOnLowBattery = false
+            triggerSettings.alwaysShowOnExternalDisplay = false
+        }
+        triggers.update(settings: triggerSettings)
         MenuBarSpacingService.apply(settings: settings)
         applyActivationPolicy()
         do {
@@ -104,6 +133,16 @@ final class AppCoordinator: NSObject, ObservableObject {
         Task { await refreshItems(promptForPermission: false) }
     }
 
+    func showSettingsFromPicker() {
+        searchPanel?.close()
+        showSettings()
+    }
+
+    func showSettingsFromShelf() {
+        shelfPanel?.close()
+        showSettings()
+    }
+
     private func applyActivationPolicy() {
         let keepRegular = settingsWindow != nil || store.settings.showDockIcon
         NSApp.setActivationPolicy(keepRegular ? .regular : .accessory)
@@ -123,6 +162,58 @@ final class AppCoordinator: NSObject, ObservableObject {
         Task { await refreshItems(promptForPermission: true) }
     }
 
+    func toggleShelf() {
+        if shelfPanel?.window?.isVisible == true {
+            shelfPanel?.close()
+        } else if let closedAt = shelfClosedAt, Date().timeIntervalSince(closedAt) < 0.35 {
+            // The click on the control just closed the shelf by taking key
+            // status away from it; do not immediately reopen it.
+            shelfClosedAt = nil
+        } else {
+            showShelf()
+        }
+    }
+
+    func showShelf() {
+        guard menuBarMode == .overflowShelf, movingItemID == nil else { return }
+        guard canRevealWithoutPrompt || !store.settings.requireAuthentication else {
+            authenticate { [weak self] in self?.showShelf() }
+            return
+        }
+        // Opening the shelf tucks back any item left revealed by a previous
+        // shelf activation, so the scan below sees the resting bar.
+        rehideTask?.cancel()
+        rehideTask = nil
+        let wasRevealed = statusBar.state == .revealedAll
+        statusBar.setState(.revealed)
+        if shelfPanel == nil {
+            let controller = ShelfPanelController(coordinator: self)
+            controller.onClose = { [weak self] in
+                self?.shelfPanel = nil
+                self?.shelfClosedAt = Date()
+            }
+            shelfPanel = controller
+        }
+        shelfPanel?.show(below: statusBar.controlScreenFrame())
+        Task {
+            if wasRevealed {
+                // Give the tucked-back items time to slide out of the bar, so
+                // this scan classifies them as overflowed and the shelf
+                // lists them again.
+                try? await Task.sleep(for: .milliseconds(400))
+            }
+            await refreshItems(promptForPermission: true)
+        }
+    }
+
+    /// The shelf's chevron, or typing while the shelf is open, expands into the
+    /// searchable list. The seed becomes the list's initial query.
+    func expandShelfToList(seedQuery: String = "") {
+        shelfPanel?.close()
+        pendingSearchQuery = seedQuery
+        showSearch()
+    }
+
     func refreshItems(promptForPermission: Bool) async {
         guard !isScanning, movingItemID == nil else { return }
         guard AccessibilityPermission.isGranted else {
@@ -132,16 +223,30 @@ final class AppCoordinator: NSObject, ObservableObject {
         }
 
         isScanning = true
-        let previousState = statusBar.state
-        statusBar.revealAll()
-        try? await Task.sleep(for: .milliseconds(140))
-        let result = await scanner.scan(apps: runningApps())
-        let boundaries = statusBar.boundaryFrames()
-        itemZones = zones(for: result, boundaries: boundaries)
+        let result: [MenuBarItemSnapshot]
+        if menuBarMode == .overflowShelf {
+            // Only the Always hidden section exists in shelf mode, and its
+            // items stay scannable while off screen, so scan in place without
+            // opening any section.
+            result = await scanner.scan(apps: runningApps())
+            itemZones = zones(for: result, boundaries: statusBar.boundaryFrames())
+        } else {
+            let previousState = statusBar.state
+            statusBar.revealAll()
+            try? await Task.sleep(for: .milliseconds(140))
+            result = await scanner.scan(apps: runningApps())
+            let boundaries = statusBar.boundaryFrames()
+            itemZones = zones(for: result, boundaries: boundaries)
+            statusBar.setState(previousState)
+        }
+        overflowIDs = OverflowClassifier.overflowedIDs(items: result, screens: screenGeometries())
         items = result
-        statusBar.setState(previousState)
         isScanning = false
         message = result.isEmpty ? "Barkeep did not find any menu bar items." : nil
+    }
+
+    func isOverflowed(_ item: MenuBarItemSnapshot) -> Bool {
+        overflowIDs.contains(item.id)
     }
 
     func currentZone(for item: MenuBarItemSnapshot) -> VisibilityZone {
@@ -150,6 +255,57 @@ final class AppCoordinator: NSObject, ObservableObject {
 
     func items(in zone: VisibilityZone) -> [MenuBarItemSnapshot] {
         items.filter { !$0.isPinnedByMacOS && currentZone(for: $0) == zone }
+    }
+
+    /// Shelf mode's saved intent for an item: hidden only when a rule says so.
+    func intentZone(for item: MenuBarItemSnapshot) -> VisibilityZone {
+        store.rules[item.id]?.zone ?? .alwaysVisible
+    }
+
+    /// The Items tab groups by saved intent in shelf mode. Live geometry is
+    /// unreliable across displays and macOS reflows, so physical disagreement
+    /// is surfaced per row instead of silently reshuffling the columns.
+    func itemsForSettings(in zone: VisibilityZone) -> [MenuBarItemSnapshot] {
+        guard menuBarMode == .overflowShelf else { return items(in: zone) }
+        return items.filter { item in
+            guard !item.isPinnedByMacOS else { return false }
+            let isHidden = intentZone(for: item) == .alwaysHidden
+            return zone == .alwaysHidden ? isHidden : !isHidden
+        }
+        // Rightmost first, so the list's top row is the safest bar position.
+        .sorted { $0.frame.midX > $1.frame.midX }
+    }
+
+    /// True when the user asked for this item to be hidden but macOS still
+    /// shows it in the bar.
+    func isPendingHide(_ item: MenuBarItemSnapshot) -> Bool {
+        menuBarMode == .overflowShelf &&
+        intentZone(for: item) == .alwaysHidden &&
+        !isOverflowed(item)
+    }
+
+    var pendingHideCount: Int {
+        items.filter { !$0.isPinnedByMacOS && isPendingHide($0) }.count
+    }
+
+    /// Explicit retry for items macOS bounced back into the bar after a hide.
+    /// Runs one confirmed move at a time and reports what is still visible.
+    func reapplyHiddenItems() async {
+        guard movingItemID == nil, !isScanning, !isApplyingOrder else { return }
+        await refreshItems(promptForPermission: true)
+        let pending = items.filter { !$0.isPinnedByMacOS && isPendingHide($0) }
+        guard !pending.isEmpty else {
+            message = "Every hidden item is already out of the bar."
+            return
+        }
+        for item in pending {
+            await moveItem(item, to: .alwaysHidden)
+        }
+        await refreshItems(promptForPermission: false)
+        let remaining = items.filter { !$0.isPinnedByMacOS && isPendingHide($0) }
+        message = remaining.isEmpty
+            ? "Barkeep moved every hidden item out of the bar."
+            : "\(remaining.count) hidden item\(remaining.count == 1 ? " is" : "s are") still in the bar. Free some menu bar space and try again."
     }
 
     func moveItem(_ item: MenuBarItemSnapshot, to zone: VisibilityZone) async {
@@ -170,6 +326,7 @@ final class AppCoordinator: NSObject, ObservableObject {
         rehideTask = nil
         statusBar.revealAll()
         defer {
+            statusBar.setControlLength(nil)
             statusBar.setState(previousState)
             movingItemID = nil
             if previousState != .hidden {
@@ -218,35 +375,106 @@ final class AppCoordinator: NSObject, ObservableObject {
             }) else {
                 throw BarkeepError.invalidGeometry
             }
-            if screens.contains(where: {
-                $0.hidesMenuBarPoint(quartzSource) || $0.hidesMenuBarPoint(quartzTarget)
-            }) {
-                throw BarkeepError.menuBarFull
+            // Every display's menu bar mirrors the same items packed from its
+            // right edge, so a point the notch occludes on the built-in
+            // display has a drawable twin on a notch-free display. Grabs from
+            // behind the notch fail (verified live), so occluded drags are
+            // remapped to the roomiest display and performed there.
+            var dragSource = quartzSource
+            var dragTarget = quartzTarget
+            var sourceOccluded = screens.contains(where: { $0.hidesMenuBarPoint(dragSource) })
+            var targetOccluded = screens.contains(where: { $0.hidesMenuBarPoint(dragTarget) })
+            if sourceOccluded || targetOccluded,
+               let notched = screens.first(where: { $0.statusAreaMinX != nil }),
+               let roomy = screens.first(where: { $0.statusAreaMinX == nil }) {
+                if sourceOccluded {
+                    dragSource = notched.remapMenuBarPoint(dragSource, to: roomy)
+                }
+                if targetOccluded {
+                    dragTarget = notched.remapMenuBarPoint(dragTarget, to: roomy)
+                }
+                moveLog.notice("""
+                remapped drag to notch-free display \
+                source=\(String(describing: dragSource), privacy: .public) \
+                target=\(String(describing: dragTarget), privacy: .public)
+                """)
+                sourceOccluded = false
+                targetOccluded = false
+            } else if sourceOccluded || targetOccluded {
+                // No notch-free display attached. Freeing Barkeep's own
+                // pixels shifts everything right and is often just enough
+                // for the occluded point to clear the notch.
+                statusBar.setControlLength(8)
+                try? await Task.sleep(for: .milliseconds(300))
+                let rescan = await scanner.scan(apps: runningApps())
+                if let shifted = rescan.first(where: { matches($0, item) }),
+                   let shiftedSource = screens.lazy.compactMap({
+                       $0.coordinates.quartzPoint(
+                           fromAccessibility: CGPoint(x: shifted.frame.midX, y: shifted.frame.midY),
+                           menuBarAnchorY: dragTarget.y
+                       )
+                   }).first,
+                   let newTarget = statusBar.targetPoint(for: zone),
+                   let shiftedTarget = screens.lazy.compactMap({
+                       $0.coordinates.quartzPoint(fromAppKit: newTarget)
+                   }).first {
+                    dragSource = shiftedSource
+                    dragTarget = shiftedTarget
+                    sourceOccluded = screens.contains { $0.hidesMenuBarPoint(dragSource) }
+                    targetOccluded = screens.contains { $0.hidesMenuBarPoint(dragTarget) }
+                    moveLog.notice("""
+                    shrunk control for occluded drag \
+                    source=\(String(describing: dragSource), privacy: .public) \
+                    target=\(String(describing: dragTarget), privacy: .public)
+                    """)
+                }
             }
             let quartzSourceFrame = CGRect(
-                x: quartzSource.x - freshItem.frame.width / 2,
-                y: quartzSource.y - freshItem.frame.height / 2,
+                x: dragSource.x - freshItem.frame.width / 2,
+                y: dragSource.y - freshItem.frame.height / 2,
                 width: freshItem.frame.width,
                 height: freshItem.frame.height
             )
 
-            if let boundaries = statusBar.boundaryFrames(),
-               boundaries.zone(for: freshItem.frame) == zone {
-                applyConfirmedMove(
-                    MoveConfirmation(items: freshItems, item: freshItem, boundaries: boundaries),
-                    to: zone
+            if targetOccluded {
+                // The hidden zone's drop point sits behind the notch. macOS
+                // can still land this drop (verified live: the drag can route
+                // through another display's menu bar), so shelf mode tries the
+                // direct drag and lets the confirmation scan decide, then
+                // falls back to the full-bar sequence. Classic mode keeps the
+                // honest upstream failure.
+                guard menuBarMode == .overflowShelf, zone == .alwaysHidden else {
+                    throw BarkeepError.menuBarFull
+                }
+                try await mover.move(
+                    from: quartzSourceFrame,
+                    to: dragTarget,
+                    originalPointer: originalPointer,
+                    screens: screens
                 )
-                return
+                if let confirmation = await confirmMove(item, to: zone) {
+                    applyConfirmedMove(confirmation, to: zone)
+                    return
+                }
+                try await hideOnFullBar(item, screens: screens, originalPointer: originalPointer)
+            } else {
+                if let boundaries = statusBar.boundaryFrames(),
+                   boundaries.zone(for: freshItem.frame) == zone {
+                    applyConfirmedMove(
+                        MoveConfirmation(items: freshItems, item: freshItem, boundaries: boundaries),
+                        to: zone
+                    )
+                    return
+                }
+                try await mover.move(
+                    from: quartzSourceFrame,
+                    to: dragTarget,
+                    originalPointer: originalPointer,
+                    screens: screens
+                )
             }
-
-            try await mover.move(
-                from: quartzSourceFrame,
-                to: quartzTarget,
-                originalPointer: originalPointer,
-                screens: screens
-            )
             guard let confirmation = await confirmMove(item, to: zone) else {
-                throw BarkeepError.moveNotConfirmed
+                throw sourceOccluded ? BarkeepError.itemOccluded : BarkeepError.moveNotConfirmed
             }
             applyConfirmedMove(confirmation, to: zone)
         } catch {
@@ -254,22 +482,363 @@ final class AppCoordinator: NSObject, ObservableObject {
         }
     }
 
-    func activate(_ item: MenuBarItemSnapshot) async {
-        if await scanner.press(itemID: item.id) {
-            searchPanel?.close()
-            scheduleRehide()
+    /// Hides an item on a completely full menu bar, where the hidden zone's
+    /// drop point is behind the notch. Sequence: shrink Barkeep's control to
+    /// free a sliver of drawable space, drag the item into the freed leftmost
+    /// slot, then recreate the Always hidden boundary immediately to the
+    /// item's right (the boundary is Barkeep's own status item, so it needs
+    /// no drag). Every drop lands on drawable pixels, and the caller's
+    /// confirmation scan still decides whether the rule is saved.
+    private func hideOnFullBar(
+        _ item: MenuBarItemSnapshot,
+        screens: [ScreenGeometry],
+        originalPointer: CGPoint
+    ) async throws {
+        statusBar.setControlLength(8)
+        defer { statusBar.setControlLength(nil) }
+        try? await Task.sleep(for: .milliseconds(300))
+
+        let snapshots = await scanner.scan(apps: runningApps())
+        guard let fresh = snapshots.first(where: { matches($0, item) }) else {
+            throw BarkeepError.itemNotFound
+        }
+        guard let screen = screens.first(where: { $0.statusAreaMinX != nil }) ?? screens.first else {
+            throw BarkeepError.invalidGeometry
+        }
+        let stripLeft = (screen.statusAreaMinX ?? screen.frame.minX) + 4
+        let visibleMovables = snapshots.filter {
+            !$0.isPinnedByMacOS &&
+            !OverflowClassifier.isOverflowed(frame: $0.frame, screens: screens)
+        }
+        guard let leftmost = visibleMovables.min(by: { $0.frame.midX < $1.frame.midX }) else {
+            throw BarkeepError.invalidGeometry
+        }
+        guard leftmost.frame.minX - stripLeft > 10 else {
+            throw BarkeepError.menuBarFull
+        }
+
+        let rawSource = CGPoint(x: fresh.frame.midX, y: fresh.frame.midY)
+        guard let quartzSource = screens.lazy.compactMap({
+            $0.coordinates.quartzPoint(fromAccessibility: rawSource, menuBarAnchorY: rawSource.y)
+        }).first else {
+            throw BarkeepError.invalidGeometry
+        }
+        if screens.contains(where: { $0.hidesMenuBarPoint(quartzSource) }) {
+            throw BarkeepError.itemOccluded
+        }
+        let sourceFrame = CGRect(
+            x: quartzSource.x - fresh.frame.width / 2,
+            y: quartzSource.y - fresh.frame.height / 2,
+            width: fresh.frame.width,
+            height: fresh.frame.height
+        )
+        let dropPoint = CGPoint(x: (stripLeft + leftmost.frame.minX - 2) / 2, y: quartzSource.y)
+        moveLog.notice("""
+        full-bar hide \(item.id, privacy: .public) \
+        drop=\(String(describing: dropPoint), privacy: .public) \
+        stripLeft=\(stripLeft, privacy: .public)
+        """)
+        try await mover.move(
+            from: sourceFrame,
+            to: dropPoint,
+            originalPointer: originalPointer,
+            screens: screens
+        )
+
+        // The boundary may close over this item only when the item is the
+        // leftmost visible movable; otherwise neighbors would be hidden too.
+        for _ in 0..<10 {
+            try? await Task.sleep(for: .milliseconds(120))
+            let rescan = await scanner.scan(apps: runningApps())
+            guard let moved = rescan.first(where: { matches($0, item) }) else { continue }
+            let visible = rescan.filter {
+                !$0.isPinnedByMacOS &&
+                !OverflowClassifier.isOverflowed(frame: $0.frame, screens: screens)
+            }
+            guard let neighbor = visible
+                .filter({ $0.id != moved.id })
+                .min(by: { $0.frame.midX < $1.frame.midX }),
+                moved.frame.midX < neighbor.frame.midX else {
+                continue
+            }
+            let desiredMidX = (moved.frame.maxX + neighbor.frame.minX) / 2
+            statusBar.repositionAlwaysHiddenBoundary(
+                preferredRightOffset: screen.frame.maxX - desiredMidX
+            )
+            try? await Task.sleep(for: .milliseconds(300))
             return
+        }
+        throw BarkeepError.moveNotConfirmed
+    }
+
+    func activate(_ item: MenuBarItemSnapshot) async {
+        // Pressing an off-screen item can report success without any visible
+        // menu, so hidden and overflowed items are revealed first and pressed
+        // at a real on-screen position.
+        if !isOverflowed(item) {
+            let pressed = await scanner.press(itemID: item.id)
+            // AXPress on a menu bar item can block until the menu closes or
+            // report failure while the menu did open, so an open menu counts
+            // as success.
+            if pressed || Self.menuIsOpen() {
+                closePickers()
+                scheduleRehide()
+                return
+            }
         }
         statusBar.revealAll()
         try? await Task.sleep(for: .milliseconds(140))
         await refreshItems(promptForPermission: true)
-        if let refreshed = items.first(where: { matches($0, item) }),
-           await scanner.press(itemID: refreshed.id) {
-            searchPanel?.close()
-            scheduleRehide()
+        var opened = false
+        if let refreshed = items.first(where: { matches($0, item) }) {
+            opened = await scanner.press(itemID: refreshed.id)
+        }
+        if opened || Self.menuIsOpen() {
+            closePickers()
+            // Shelf mode keeps the activated item in the bar so it can keep
+            // being used; it tucks back the next time the shelf opens.
+            if menuBarMode != .overflowShelf {
+                scheduleRehide()
+            }
         } else {
             message = BarkeepError.itemNotFound.localizedDescription
         }
+    }
+
+    private func closePickers() {
+        searchPanel?.close()
+        shelfPanel?.close()
+    }
+
+    /// Direct drag-to-reorder from the Items tab: one confirmed move that
+    /// places the item at the given position counting from the right.
+    func reorderItem(_ item: MenuBarItemSnapshot, toRank rank: Int) async {
+        guard movingItemID == nil, !isScanning, !isApplyingOrder else { return }
+        guard AccessibilityPermission.isGranted else {
+            AccessibilityPermission.request()
+            message = BarkeepError.accessibilityRequired.localizedDescription
+            return
+        }
+        isApplyingOrder = true
+        defer { isApplyingOrder = false }
+        let entry = PriorityEntry(
+            id: item.id,
+            displayName: item.displayName,
+            ownerName: item.ownerName,
+            bundleIdentifier: item.bundleIdentifier
+        )
+        do {
+            if try await placePriorityItem(entry, rank: max(0, rank)) {
+                message = "\(item.displayName) moved."
+            }
+        } catch {
+            message = "\(item.displayName): \(error.localizedDescription)"
+        }
+        await refreshItems(promptForPermission: false)
+    }
+
+    /// Applies the saved priority order with real, confirmed Command-drags:
+    /// rank 1 lands rightmost, each later rank immediately left of the one
+    /// before it. Runs only from the explicit "Apply Order Now" action, moves
+    /// one item at a time, rescans between moves, and stops on the first
+    /// failure with the earlier arrangement untouched from that point on.
+    func applyPriorityOrder() async {
+        guard movingItemID == nil, !isScanning, !isApplyingOrder else { return }
+        guard AccessibilityPermission.isGranted else {
+            AccessibilityPermission.request()
+            message = BarkeepError.accessibilityRequired.localizedDescription
+            return
+        }
+        let priority = store.priorityOrder
+        guard !priority.isEmpty else {
+            message = "Add items to the priority list first."
+            return
+        }
+
+        isApplyingOrder = true
+        defer { isApplyingOrder = false }
+        var movedCount = 0
+        for (rank, entry) in priority.enumerated() {
+            do {
+                if try await placePriorityItem(entry, rank: rank) {
+                    movedCount += 1
+                }
+            } catch {
+                message = "\(entry.displayName): \(error.localizedDescription)"
+                await refreshItems(promptForPermission: false)
+                return
+            }
+        }
+        await refreshItems(promptForPermission: false)
+        message = movedCount == 0
+            ? "The menu bar already matches the priority order."
+            : "Barkeep applied the priority order with \(movedCount) move\(movedCount == 1 ? "" : "s")."
+    }
+
+    private func placePriorityItem(_ entry: PriorityEntry, rank: Int) async throws -> Bool {
+        let screens = screenGeometries()
+        var snapshots = await scanner.scan(apps: runningApps())
+        var movable = OrderPlanner.movableRightToLeft(snapshots)
+        guard let match = movable.first(where: { matchesPriority($0, entry) }) else {
+            throw BarkeepError.itemNotFound
+        }
+        if OrderPlanner.isInPlace(itemID: match.id, rank: rank, movableRightToLeft: movable) {
+            return false
+        }
+        guard let anchor = OrderPlanner.rightAnchorMinX(snapshots),
+              let target = OrderPlanner.moveTarget(
+                itemID: match.id,
+                rank: rank,
+                movableRightToLeft: movable,
+                rightAnchorMinX: anchor
+              ) else {
+            throw BarkeepError.invalidGeometry
+        }
+        guard let originalPointer = screens.lazy.compactMap({
+            $0.coordinates.quartzPoint(fromAppKit: NSEvent.mouseLocation)
+        }).first else {
+            throw BarkeepError.invalidGeometry
+        }
+        let rawSource = CGPoint(x: match.frame.midX, y: match.frame.midY)
+        guard let quartzSource = screens.lazy.compactMap({
+            $0.coordinates.quartzPoint(fromAccessibility: rawSource, menuBarAnchorY: rawSource.y)
+        }).first, let quartzTarget = screens.lazy.compactMap({
+            $0.coordinates.quartzPoint(fromAccessibility: target, menuBarAnchorY: rawSource.y)
+        }).first else {
+            throw BarkeepError.invalidGeometry
+        }
+        if screens.contains(where: { $0.hidesMenuBarPoint(quartzSource) }) {
+            throw BarkeepError.itemOccluded
+        }
+        if screens.contains(where: { $0.hidesMenuBarPoint(quartzTarget) }) {
+            throw BarkeepError.menuBarFull
+        }
+
+        movingItemID = match.id
+        defer { movingItemID = nil }
+        moveLog.notice("""
+        order move \(match.id, privacy: .public) rank=\(rank, privacy: .public) \
+        source=\(String(describing: quartzSource), privacy: .public) \
+        target=\(String(describing: quartzTarget), privacy: .public)
+        """)
+        let sourceFrame = CGRect(
+            x: quartzSource.x - match.frame.width / 2,
+            y: quartzSource.y - match.frame.height / 2,
+            width: match.frame.width,
+            height: match.frame.height
+        )
+        try await mover.move(
+            from: sourceFrame,
+            to: quartzTarget,
+            originalPointer: originalPointer,
+            screens: screens
+        )
+        for _ in 0..<10 {
+            try? await Task.sleep(for: .milliseconds(120))
+            snapshots = await scanner.scan(apps: runningApps())
+            movable = OrderPlanner.movableRightToLeft(snapshots)
+            if let fresh = movable.first(where: { matchesPriority($0, entry) }),
+               OrderPlanner.isInPlace(itemID: fresh.id, rank: rank, movableRightToLeft: movable) {
+                items = snapshots
+                overflowIDs = OverflowClassifier.overflowedIDs(items: snapshots, screens: screens)
+                return true
+            }
+        }
+        throw BarkeepError.moveNotConfirmed
+    }
+
+    /// Launch-flag helper: activates an item the way a shelf click does and
+    /// reports whether a menu actually opened on screen.
+    func debugActivate(bundleIdentifier: String) async {
+        try? await Task.sleep(for: .milliseconds(600))
+        await refreshItems(promptForPermission: true)
+        guard let item = items.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            print("debug-activate: no item for \(bundleIdentifier)")
+            fflush(stdout)
+            return
+        }
+        print("debug-activate: \(item.displayName) frame=\(item.frame) overflowed=\(isOverflowed(item))")
+        fflush(stdout)
+        await activate(item)
+        try? await Task.sleep(for: .milliseconds(800))
+        print("debug-activate: menuIsOpen=\(Self.menuIsOpen()) message=\(message ?? "none")")
+        let rescan = await scanner.scan(apps: runningApps())
+        if let fresh = rescan.first(where: { $0.bundleIdentifier == bundleIdentifier }) {
+            print("debug-activate: item now at \(fresh.frame)")
+        }
+        fflush(stdout)
+    }
+
+    /// Launch-flag helper: exercises the full move pipeline headlessly so a
+    /// terminal launch can verify hide and unhide without the Settings UI.
+    func debugMove(bundleIdentifier: String, to zone: VisibilityZone) async {
+        try? await Task.sleep(for: .milliseconds(600))
+        await refreshItems(promptForPermission: true)
+        guard let item = items.first(where: { $0.bundleIdentifier == bundleIdentifier }) else {
+            print("debug-move: no item for \(bundleIdentifier)")
+            fflush(stdout)
+            return
+        }
+        print("debug-move: \(item.displayName) frame=\(item.frame) -> \(zone.rawValue)")
+        statusBar.revealAll()
+        try? await Task.sleep(for: .milliseconds(200))
+        if let boundaries = statusBar.boundaryFrames() {
+            print("debug-move boundaries: control=\(boundaries.control) alwaysHidden=\(boundaries.alwaysHidden) target(\(zone.rawValue))=\(String(describing: boundaries.targetPoint(for: zone)))")
+        } else {
+            print("debug-move boundaries: unavailable")
+        }
+        for screen in screenGeometries() {
+            print("debug-move screen: \(screen.frame) statusAreaMinX=\(String(describing: screen.statusAreaMinX))")
+        }
+        fflush(stdout)
+        await moveItem(item, to: zone)
+        let resultZone = itemZones[item.id].map(\.rawValue) ?? "unknown"
+        print("debug-move result: zone=\(resultZone) message=\(message ?? "none")")
+        let after = await scanner.scan(apps: runningApps())
+        if let final = after.first(where: { $0.bundleIdentifier == bundleIdentifier }) {
+            print("debug-move after: frame=\(final.frame)")
+        } else {
+            print("debug-move after: item not found in rescan")
+        }
+        if let boundaries = statusBar.boundaryFrames() {
+            print("debug-move after boundaries: alwaysHidden=\(boundaries.alwaysHidden)")
+        }
+        fflush(stdout)
+    }
+
+    /// Launch-flag helper: prints every scanned item with its frame and
+    /// overflow classification to stdout so a terminal launch can verify the
+    /// notch hypothesis without any UI.
+    func printDebugScan() async {
+        await refreshItems(promptForPermission: true)
+        let screens = screenGeometries()
+        print("debug-scan: \(items.count) items, mode=\(menuBarMode.rawValue) state=\(statusBar.state.rawValue)")
+        if let boundaries = statusBar.boundaryFrames() {
+            print("boundaries: control=\(boundaries.control) alwaysHidden=\(boundaries.alwaysHidden)")
+        } else {
+            print("boundaries: unavailable")
+        }
+        let defaults = UserDefaults.standard
+        for name in ["Barkeep.Control.v3", "Barkeep.AlwaysHiddenBoundary.v3", "Barkeep.HiddenBoundary.v3"] {
+            print("preferred \(name): \(defaults.object(forKey: "NSStatusItem Preferred Position \(name)") ?? "unset")")
+        }
+        for screen in screens {
+            print("screen quartz=\(screen.frame) statusAreaMinX=\(screen.statusAreaMinX.map(String.init(describing:)) ?? "none")")
+        }
+        for item in items.sorted(by: { $0.frame.midX < $1.frame.midX }) {
+            let state = isOverflowed(item) ? "OVERFLOWED" : "visible"
+            let pinned = item.isPinnedByMacOS ? " pinned" : ""
+            print("\(state)\(pinned) x=\(Int(item.frame.minX))-\(Int(item.frame.maxX)) \(item.displayName) [\(item.bundleIdentifier ?? "?")]")
+        }
+        fflush(stdout)
+    }
+
+    private func matchesPriority(_ item: MenuBarItemSnapshot, _ entry: PriorityEntry) -> Bool {
+        item.id == entry.id || (
+            item.bundleIdentifier == entry.bundleIdentifier &&
+            item.displayName == entry.displayName &&
+            item.ownerName == entry.ownerName
+        )
     }
 
     func requestReveal(all: Bool) {
@@ -291,7 +860,13 @@ final class AppCoordinator: NSObject, ObservableObject {
         guard movingItemID == nil else { return }
         rehideTask?.cancel()
         rehideTask = nil
-        statusBar.hide()
+        if menuBarMode == .overflowShelf {
+            // Shelf mode's resting state keeps everything inline except the
+            // Always hidden section.
+            statusBar.setState(.revealed)
+        } else {
+            statusBar.hide()
+        }
         authenticationContext = nil
     }
 
@@ -328,12 +903,16 @@ final class AppCoordinator: NSObject, ObservableObject {
 
     private func handlePrimaryClick(_ event: NSEvent) {
         guard movingItemID == nil else { return }
-        if event.modifierFlags.contains(.option) {
+        if menuBarMode == .overflowShelf {
+            if event.modifierFlags.contains(.option) {
+                showSearch()
+            } else {
+                toggleShelf()
+            }
+        } else if event.modifierFlags.contains(.option) {
             if statusBar.state == .revealedAll { hide() } else { requestReveal(all: true) }
-        } else if statusBar.state == .hidden {
-            requestReveal(all: false)
         } else {
-            hide()
+            showSearch()
         }
     }
 
@@ -345,8 +924,12 @@ final class AppCoordinator: NSObject, ObservableObject {
 
     private func scheduleRehide() {
         rehideTask?.cancel()
-        guard store.settings.autoRehide else { return }
-        let delay = store.settings.rehideDelay
+        // Shelf mode always returns to its resting state; the auto-rehide
+        // preference only governs classic mode.
+        guard store.settings.autoRehide || menuBarMode == .overflowShelf else { return }
+        // Shelf mode tucks revealed items back the moment the menu closes;
+        // the classic delay only applies to classic mode.
+        let delay = menuBarMode == .overflowShelf ? 0.6 : store.settings.rehideDelay
         rehideTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             // Stay open while the pointer is in the menu bar area or a menu
@@ -392,7 +975,7 @@ final class AppCoordinator: NSObject, ObservableObject {
         authenticationContext = context
         context.evaluatePolicy(
             .deviceOwnerAuthentication,
-            localizedReason: "Show hidden menu bar items"
+            localizedReason: "Open the menu bar item picker"
         ) { [weak self] success, _ in
             Task { @MainActor in
                 if success {
@@ -406,7 +989,10 @@ final class AppCoordinator: NSObject, ObservableObject {
     }
 
     private func runningApps() -> [RunningAppDescriptor] {
-        NSWorkspace.shared.runningApplications.map {
+        let ownPID = ProcessInfo.processInfo.processIdentifier
+        return NSWorkspace.shared.runningApplications.filter {
+            $0.processIdentifier != ownPID
+        }.map {
             RunningAppDescriptor(
                 pid: $0.processIdentifier,
                 name: $0.localizedName ?? $0.bundleIdentifier ?? "App",
@@ -536,12 +1122,19 @@ final class AppCoordinator: NSObject, ObservableObject {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
-        let toggleTitle = statusBar.state == .hidden ? "Show Hidden Items" : "Hide Items"
-        menu.addItem(withTitle: toggleTitle, action: #selector(menuToggle), keyEquivalent: "")
-        menu.addItem(withTitle: "Show All Items", action: #selector(menuShowAll), keyEquivalent: "")
-        menu.addItem(.separator())
-        menu.addItem(withTitle: "Find Item…", action: #selector(menuSearch), keyEquivalent: "f")
-        menu.addItem(withTitle: "Arrange Items…", action: #selector(menuSettings), keyEquivalent: ",")
+        if menuBarMode == .overflowShelf {
+            menu.addItem(withTitle: "Open Overflow Shelf", action: #selector(menuShelf), keyEquivalent: "")
+            menu.addItem(withTitle: "Open Item Picker…", action: #selector(menuSearch), keyEquivalent: "f")
+            menu.addItem(.separator())
+            menu.addItem(withTitle: "Settings…", action: #selector(menuSettings), keyEquivalent: ",")
+        } else {
+            menu.addItem(withTitle: "Open Item Picker…", action: #selector(menuSearch), keyEquivalent: "f")
+            menu.addItem(withTitle: "Arrange Visible Items…", action: #selector(menuSettings), keyEquivalent: ",")
+            menu.addItem(.separator())
+            let toggleTitle = statusBar.state == .hidden ? "Show Hidden Items" : "Hide Items"
+            menu.addItem(withTitle: toggleTitle, action: #selector(menuToggle), keyEquivalent: "")
+            menu.addItem(withTitle: "Show All Items", action: #selector(menuShowAll), keyEquivalent: "")
+        }
         if updater.isConfigured {
             let updateTitle = updater.pendingVersion.map { "Update to \($0)…" } ?? "Check for Updates…"
             menu.addItem(withTitle: updateTitle, action: #selector(menuUpdate), keyEquivalent: "")
@@ -557,6 +1150,7 @@ final class AppCoordinator: NSObject, ObservableObject {
     }
 
     @objc private func menuShowAll() { requestReveal(all: true) }
+    @objc private func menuShelf() { showShelf() }
     @objc private func menuSearch() { showSearch() }
     @objc private func menuSettings() { showSettings() }
     @objc private func menuUpdate() {

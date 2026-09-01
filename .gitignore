@@ -11,3 +11,4 @@ release.env
 *.p12
 *.xcuserstate
 xcuserdata/
+.superpowers/

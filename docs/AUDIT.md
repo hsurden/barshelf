@@ -26,8 +26,8 @@ dependency. The update framework remains isolated from launch and menu bar behav
 | Item arrangement | A direct drag or section-menu action can request one move |
 | Move evidence | Use a fresh live frame before moving and confirm with fresh scans |
 | Failed moves | Keep the earlier saved rule and restore the earlier reveal state |
-| Search | Use the current snapshot and refresh only on request |
-| Reveal behavior | Click reveals Hidden; Option-click reveals all items |
+| Item picker | Use the current snapshot and refresh only on request |
+| Reveal behavior | Click opens the picker; Option-click reveals all items |
 | Background work | Launch, wake, display events, timers, and updates never move items |
 | Permissions | Accessibility only for listing, opening, and moving menu bar items |
 | Saved data | Keep one local, versioned settings document with no saved geometry |
@@ -136,5 +136,5 @@ source-text tests cannot prove that synthetic input moved a status item.
 - Notched and non-notched displays allow normal Settings moves.
 - No passive event moves the pointer.
 - Authentication protects every reveal path.
-- Search opens and closes without keeping a scan timer alive.
+- The item picker opens and closes without keeping a scan timer alive.
 - Update failure does not delay app start.

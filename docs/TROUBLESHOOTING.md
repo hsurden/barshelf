@@ -56,7 +56,8 @@ can change the current reveal state.
 
 ## A keyboard shortcut does nothing
 
-Barkeep uses `Command-Backslash` to show or hide items and `Command-Shift-Space` to open search.
+Barkeep uses `Command-Backslash` to show or hide items in the physical bar and
+`Command-Shift-Space` to open the item picker.
 Another app can register the same global shortcut first. Quit the other app or remove its shortcut,
 then restart Barkeep.
 
@@ -74,9 +75,8 @@ item moves. Open the Items screen and move any real menu bar items that do not m
 
 ## Check for Updates is missing
 
-The update command appears only when the app bundle contains a valid Sparkle feed URL and public
-key. Run Barkeep from a complete app bundle made by `make build` or install a signed release. A raw
-Xcode executable does not contain the full release setup.
+This personal fork intentionally has no automatic upstream update command. Pull and review upstream
+source changes instead; do not add the upstream binary feed to the custom app.
 
 ## Reset local state without deleting it
 

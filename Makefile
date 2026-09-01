@@ -1,7 +1,10 @@
-.PHONY: build check dmg install release publish run
+.PHONY: build check dmg install local-build run
 
 build:
 	./scripts/build-app.sh
+
+local-build:
+	./scripts/build-local-clt.sh
 
 check:
 	xcodegen generate
@@ -12,11 +15,5 @@ dmg:
 
 install:
 	./scripts/install-local.sh
-
-release:
-	./scripts/release.sh
-
-publish:
-	PUBLISH=1 ./scripts/release.sh
 
 run: install

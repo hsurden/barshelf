@@ -32,13 +32,5 @@
     <string>Copyright © 2026 Ian Nuttall</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/iannuttall/barkeep/main/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string>nwuSNKWY2YAhvGb8G4DF2Zxmpugdei3TaQekrb2S/vg=</string>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
 </dict>
 </plist>

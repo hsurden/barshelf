@@ -8,21 +8,23 @@ product decision changes them.
 Barkeep always uses the same three names and meanings.
 
 1. **Always visible** items stay visible.
-2. **Hidden** items appear when the user makes a normal reveal action.
-3. **Always hidden** items appear only when the user asks to show everything.
+2. **Hidden** items stay in the picker and can also appear through an explicit physical reveal.
+3. **Always hidden** items stay in the picker without consuming physical menu-bar space.
 
 The Items screen shows all three sections at the same time. A user can drag an item or use its
 section menu. Drag and drop is a fast option, but it is not the only way to arrange items.
 
 ## Main controls stay predictable
 
-- A click on the Barkeep icon toggles the Hidden section.
+- A click on the Barkeep icon opens the item picker.
 - An Option-click toggles all hidden items.
 - A right-click opens a short command menu.
 - `Command-Backslash` toggles the Hidden section.
-- `Command-Shift-Space` opens search.
+- `Command-Shift-Space` opens the item picker.
 
-The right-click menu contains common actions. Less common settings stay in the settings window.
+The picker lists Hidden & Overflow items before Visible items, supports filtering, opens a selected
+item's real menu, and links directly to arrangement. The right-click menu contains management and
+physical-reveal actions. Less common settings stay in the settings window.
 
 ## Item moves require a direct user action
 
@@ -54,7 +56,7 @@ These defaults keep idle work and surprise behavior low.
 
 | Setting | Default |
 |---|---|
-| Click the Barkeep icon to reveal | On |
+| Click the Barkeep icon | Open item picker |
 | Hide items again | On, after 5 seconds |
 | Hide when the active app changes | Off |
 | Reveal on hover | Off |
@@ -71,7 +73,7 @@ when the user turns the related setting off.
 
 ## Icons stay small and native
 
-Dot is the default. Barkeep also provides seven monochrome menu bar symbols.
+Ellipsis is the default. Barkeep also provides seven monochrome menu bar symbols.
 
 - Dot
 - Ring
@@ -90,8 +92,8 @@ with light and dark menu bars.
 Barkeep has no account, telemetry, or cloud sync. It stores settings, item rules, and profiles in
 one versioned JSON document under Application Support. Export uses the same document format.
 
-Touch ID uses `LocalAuthentication`. Launch at Login uses `SMAppService`. Update checks use the
-pinned public Sparkle feed. No update failure can block app launch or the menu bar engine.
+Touch ID uses `LocalAuthentication`. Launch at Login uses `SMAppService`. The personal fork does not
+load an upstream binary update feed; upstream changes are reviewed as source before merging.
 
 ## Current limits must stay visible
 

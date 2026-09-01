@@ -55,6 +55,39 @@ final class StateStore: ObservableObject {
         save()
     }
 
+    var priorityOrder: [PriorityEntry] { document.priorityOrder ?? [] }
+
+    func addPriority(for item: MenuBarItemSnapshot) {
+        var updated = document
+        var order = updated.priorityOrder ?? []
+        guard !order.contains(where: { $0.id == item.id }) else { return }
+        order.append(PriorityEntry(
+            id: item.id,
+            displayName: item.displayName,
+            ownerName: item.ownerName,
+            bundleIdentifier: item.bundleIdentifier
+        ))
+        updated.priorityOrder = order
+        document = updated
+        save()
+    }
+
+    func removePriority(id: String) {
+        var updated = document
+        updated.priorityOrder = (updated.priorityOrder ?? []).filter { $0.id != id }
+        document = updated
+        save()
+    }
+
+    func movePriority(fromOffsets: IndexSet, toOffset: Int) {
+        var updated = document
+        var order = updated.priorityOrder ?? []
+        order.move(fromOffsets: fromOffsets, toOffset: toOffset)
+        updated.priorityOrder = order
+        document = updated
+        save()
+    }
+
     func removeRule(id: String) {
         var updated = document
         updated.rules[id] = nil

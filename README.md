@@ -23,22 +23,26 @@ Barkeep splits the menu bar into three sections.
 | Section | What Barkeep does |
 |---|---|
 | **Always visible** | These items stay in the menu bar. |
-| **Hidden** | Click the Barkeep icon to show or hide these items. |
-| **Always hidden** | Option-click the Barkeep icon when you need these items. |
+| **Hidden** | These stay in the picker and can also be revealed in the physical bar. |
+| **Always hidden** | These stay in the picker without taking physical menu-bar space. |
 
 Open **Arrange Items** to see all three sections together. Drag an item to another section or
 use the menu on its row. Barkeep checks the real menu bar after each move. It saves the new
 section only when macOS completes the move.
 
-The default Barkeep icon is a small dot. You can choose from eight monochrome symbols.
+The default Barkeep icon is a compact ellipsis. You can choose from eight monochrome symbols.
 
 ## Use Barkeep without leaving your current app
 
-- Click the Barkeep icon to show or hide the Hidden section.
+- Click the Barkeep icon to open a picker containing Hidden & Overflow items plus Visible items.
 - Option-click the icon to show all sections.
-- Right-click the icon for search, settings, updates, and other common actions.
+- Right-click the icon for arrangement, physical reveal controls, and other management actions.
 - Press `Command-Backslash` to show or hide items.
-- Press `Command-Shift-Space` to find and open a menu bar item.
+- Press `Command-Shift-Space` to open the item picker.
+
+Choose an entry in the picker to open that item's real menu. Use its arrangement button to decide
+which important icons should remain physically visible. The picker remains usable when the menu bar
+does not have enough width to display every managed item at once.
 
 Barkeep can hide items again after a delay. It can also reveal them when you click, scroll, or
 hover in the menu bar. Each optional trigger stops when you turn it off.
@@ -72,6 +76,16 @@ make check
 make install
 ```
 
+This personal fork also has a Command-Line-Tools fallback for HS's current Mac, where full Xcode is
+not installed:
+
+```sh
+make local-build   # Build dist/Barkeep HS.app without replacing the upstream app
+```
+
+The fallback uses an ad-hoc signature, so macOS may ask for Accessibility permission again after a
+rebuild. A stable Apple signing identity remains preferable for long-term use.
+
 `make install` builds the app, installs it in `~/Applications`, and opens it. A Developer ID
 certificate gives local builds a stable identity. Without one, macOS can ask for Accessibility
 access again after a rebuild.
@@ -97,9 +111,9 @@ shasum -a 256 ~/Downloads/Barkeep-*.dmg
 ```sh
 make check       # Generate the Xcode project and run tests
 make build       # Build and sign dist/Barkeep.app
+make local-build # Build dist/Barkeep HS.app with Command Line Tools
 make install     # Install to ~/Applications and open the app
 make dmg         # Build a drag-install DMG
-make release     # Sign, notarize, staple, and prepare a release
 ```
 
 These are the main source areas.
@@ -108,7 +122,7 @@ These are the main source areas.
 Sources/Barkeep/App/             app lifecycle and coordination
 Sources/Barkeep/StatusBar/       status items and visibility boundaries
 Sources/Barkeep/Accessibility/   item scanning and confirmed moves
-Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and updates
+Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and update policy
 Sources/Barkeep/UI/              settings, search, and permission views
 Tests/BarkeepTests/              unit tests for state and core rules
 scripts/                         build, install, DMG, and release commands
@@ -121,8 +135,9 @@ Read [AGENTS.md](AGENTS.md) before changing the app. The supporting docs cover t
 
 ## Current limits
 
-The current app includes the three visibility sections, safe item moves, search, reveal triggers,
-Touch ID protection, profiles, backups, tighter item spacing, and Sparkle updates.
+The current app includes the three visibility sections, safe item moves, the item picker, reveal
+triggers, Touch ID protection, profiles, backups, and tighter item spacing. This personal fork does
+not accept automatic upstream app updates; upstream changes are reviewed and merged as source.
 
 A second menu bar, custom bar styling, low-battery rules, scripts, and network triggers are not
 part of the current app. Profiles save Barkeep's stored rules and settings. Loading a profile does

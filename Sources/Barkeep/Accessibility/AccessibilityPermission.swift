@@ -8,12 +8,9 @@ enum AccessibilityPermission {
 
     @MainActor
     static func request() {
+        // The standard macOS dialog with "Open System Settings" is the whole
+        // flow. Barkeep's own drag-tile guide panel confused more than it
+        // helped and is only reachable through its explicit launch flag now.
         AXIsProcessTrustedWithOptions(["AXTrustedCheckOptionPrompt": true] as CFDictionary)
-        Task { @MainActor in
-            // The trust request is asynchronous. Give macOS time to register this
-            // signed bundle before System Settings reads its list.
-            try? await Task.sleep(for: .milliseconds(600))
-            PermissionAssistant.shared.presentAccessibilityGuide()
-        }
     }
 }

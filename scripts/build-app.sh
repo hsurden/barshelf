@@ -82,46 +82,18 @@ if [[ "$sign_identity" != "-" ]]; then
     sign_flags+=(--options runtime --timestamp)
 fi
 
-sign_component() {
-    codesign "${sign_flags[@]}" --sign "$sign_identity" "$1"
-}
-
-# Sparkle ships its helper tools with ad hoc signatures. Sign each nested
-# bundle from the inside out before signing the framework and main app.
-sparkle_version_dir="$dist_app/Contents/Frameworks/Sparkle.framework/Versions/B"
-for xpc in "$sparkle_version_dir"/XPCServices/*.xpc(N); do
-    sign_component "$xpc"
-done
-if [[ -e "$sparkle_version_dir/Updater.app" ]]; then
-    sign_component "$sparkle_version_dir/Updater.app"
-fi
-if [[ -e "$sparkle_version_dir/Autoupdate" ]]; then
-    sign_component "$sparkle_version_dir/Autoupdate"
-fi
-sign_component "$dist_app/Contents/Frameworks/Sparkle.framework"
-
 codesign "${sign_flags[@]}" --entitlements "$entitlements" \
     --sign "$sign_identity" "$dist_app"
 
 codesign --verify --deep --strict --verbose=2 "$dist_app"
 
 if [[ "$sign_identity" != "-" ]]; then
-    signed_components=(
-        "$dist_app"
-        "$dist_app/Contents/Frameworks/Sparkle.framework"
-        "$sparkle_version_dir/Updater.app"
-        "$sparkle_version_dir/Autoupdate"
-        "$sparkle_version_dir/XPCServices/Downloader.xpc"
-        "$sparkle_version_dir/XPCServices/Installer.xpc"
-    )
-    for component in "${signed_components[@]}"; do
-        sign_info="$(codesign -d --verbose=4 "$component" 2>&1 || true)"
-        if [[ "$sign_info" != *"Authority=Developer ID Application:"* || \
-              "$sign_info" != *"Timestamp="* ]]; then
-            echo "$component does not have a timestamped Developer ID signature" >&2
-            exit 65
-        fi
-    done
+    sign_info="$(codesign -d --verbose=4 "$dist_app" 2>&1 || true)"
+    if [[ "$sign_info" != *"Authority=Developer ID Application:"* || \
+          "$sign_info" != *"Timestamp="* ]]; then
+        echo "$dist_app does not have a timestamped Developer ID signature" >&2
+        exit 65
+    fi
 
     if codesign -d --entitlements :- "$dist_app" 2>/dev/null \
         | plutil -extract com.apple.security.get-task-allow raw -o - - 2>/dev/null \

@@ -38,7 +38,7 @@ final class AccessibilityScanner: @unchecked Sendable {
         var snapshots: [MenuBarItemSnapshot] = []
         var newElements: [String: AXUIElement] = [:]
 
-        for app in apps where app.bundleIdentifier != "is.ian.barkeep" {
+        for app in apps {
             let application = AXUIElementCreateApplication(app.pid)
             // AXMenuBar is the app's File/Edit/View menu. AXExtrasMenuBar contains
             // the status items that appear on the right side of the macOS menu bar.

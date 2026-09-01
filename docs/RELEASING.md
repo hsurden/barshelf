@@ -1,5 +1,10 @@
 # Release Barkeep
 
+> Personal-fork note: this inherited upstream release procedure is currently disabled and is kept
+> only as reference. It depends on the upstream Sparkle feed and repository. Do not run it for the
+> custom app without first designing a separate bundle identity, repository, signing setup, and
+> non-upstream release process.
+
 Barkeep uses a local signing workflow. Public builds use Developer ID signing, hardened runtime,
 Apple notarization, DMG stapling, and Sparkle EdDSA signatures. GitHub checks the staged files and
 publishes the release after the signed appcast reaches `main`.
@@ -45,7 +50,7 @@ Check each real behavior before a public build.
 - Accessibility setup opens the correct System Settings page.
 - One item can move into each section and stays there after relaunch.
 - A failed move does not change the saved section.
-- Click, Option-click, both hotkeys, search, and Touch ID work.
+- Click-to-open picker, Option-click, both hotkeys, picker activation, and Touch ID work.
 - Tighter spacing restores the earlier macOS values when turned off.
 - A failed update check does not delay app launch.
 

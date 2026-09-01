@@ -1,13 +1,15 @@
 # Agent notes
 
 Barkeep is a local native macOS menu bar manager. It uses Swift 6, an AppKit lifecycle and status
-bar, SwiftUI views, XcodeGen, and Sparkle.
+bar, SwiftUI views, and XcodeGen. The personal fork deliberately removed Sparkle so an upstream
+binary update cannot overwrite custom behavior.
 
 ## Product rules
 
 - Every item belongs to **Always visible**, **Hidden**, or **Always hidden**.
-- Click reveals Hidden. Option-click reveals all items. Right-click opens the command menu.
-- `Command-Backslash` toggles items. `Command-Shift-Space` opens search.
+- Click opens the overflow-first item picker. Option-click reveals all items in the physical bar.
+  Right-click opens the management menu.
+- `Command-Backslash` toggles items in the physical bar. `Command-Shift-Space` opens the picker.
 - Only a direct item-section action can post a Command-drag.
 - A move must use fresh Accessibility data and must pass a second scan before state is saved.
 - Launch, wake, display events, app events, timers, and updates must never move an item.
@@ -28,8 +30,8 @@ Sources/Barkeep/StatusBar/       visibility boundaries and menu bar icons
 Sources/Barkeep/Accessibility/   scans, permission checks, and confirmed moves
 Sources/Barkeep/Permissions/     guided Accessibility setup
 Sources/Barkeep/Storage/         local versioned JSON state
-Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and updates
-Sources/Barkeep/UI/              settings and search windows
+Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and update policy
+Sources/Barkeep/UI/              settings and item-picker windows
 Tests/BarkeepTests/              unit tests
 scripts/                         build, install, DMG, and release entry points
 .github/workflows/               public CI and release validation
@@ -40,10 +42,9 @@ scripts/                         build, install, DMG, and release entry points
 ```sh
 make check
 make build
+make local-build
 make install
 make dmg
-make release
-make publish
 ```
 
 `make check` runs XcodeGen before `xcodebuild test`. Generated `Barkeep.xcodeproj`, `.xcode-build`,
@@ -138,7 +139,7 @@ CI must continue to complete these checks.
 - Generate the Xcode project
 - Run unit tests with code signing off
 - Build the complete app bundle
-- Check that Sparkle is present
+- Check that no upstream automatic-update feed is present
 - Verify the app signature
 - Launch the app and confirm that it stays running
 
@@ -151,22 +152,139 @@ archive that will ship. A source-text test does not prove that a real move worke
 - One app target and one unit test target
 - Developer ID signing and hardened runtime
 - Apple notarization and DMG stapling
-- Sparkle feed with a pinned EdDSA public key
 - SHA-256 checksum with every public DMG
 
-`scripts/build-app.sh` must sign Sparkle's XPC services, updater app, autoupdate tool, framework,
-and main app in that order. Every public component needs a Developer ID signature and secure
-timestamp. The main app must not contain `com.apple.security.get-task-allow`. Do not rely on
-Xcode's outer app signature because Sparkle's downloaded helper tools use ad hoc signatures.
+The main app needs a Developer ID signature and secure timestamp for a public release and must not
+contain `com.apple.security.get-task-allow`.
 
-`scripts/release.sh` uses local Apple and Sparkle credentials. Never commit signing identities,
-notary credentials, private keys, `release.env`, or release artifacts.
+Never commit signing identities, notary credentials, private keys, `release.env`, or release
+artifacts.
 
-Update `version.env` and `RELEASE_NOTES.md` before a public release. `make publish` requires a clean
-worktree, creates a draft GitHub release, commits the signed appcast, and pushes it. GitHub publishes
-the draft only after the release workflow validates the assets and checksum.
-
-The Sparkle public key and feed URL are pinned in `Info.plist`. Do not rotate the key or change the
-feed after the first release without a migration plan.
+The inherited `scripts/release.sh`, `appcast.xml`, and upstream publish workflow are not the release
+path for this fork unless they are deliberately redesigned for a separate repository and identity.
 
 GitHub issues are open. Pull request creation is limited to repository collaborators.
+
+## HS custom-fork context and product goal
+
+This checkout is intended to become a personal, simpler replacement for Bartender on HS's Mac.
+Do not assume the upstream product behavior is the desired behavior merely because it already
+exists. Preserve the upstream safety constraints above, but optimize the user-facing workflow for
+the concrete overflow problem described here.
+
+### Why this project exists
+
+On 2026-08-31, Bartender stopped being usable after HS upgraded to macOS 26.5.1 Tahoe. The installed
+copy was Bartender 5.2.3. Clicking its three-dots menu-bar control made the control disappear because
+Bartender was actually crashing. Three crash reports were found that day under
+`~/Library/Logs/DiagnosticReports/`, including one produced at the exact time of the test. Bartender's
+own release notes say Bartender 5 is incompatible with Tahoe and requires the paid Bartender 6
+upgrade. Rather than pay for another major version, HS chose to investigate an open-source base for
+a personal replacement.
+
+Upstream Barkeep 0.1.1 was selected from:
+
+```text
+https://github.com/iannuttall/barkeep
+```
+
+The upstream repository was cloned into this directory on 2026-08-31. HS also installed the signed
+upstream release at `/Applications/Barkeep.app`. Treat `origin/main` as upstream source unless the
+remote configuration later says otherwise. Ask before committing any changes.
+
+### The actual user problem
+
+HS has more right-side menu-bar icons than fit on a notched MacBook display. macOS pushes some
+running menu-bar-only applications leftward behind the black camera/notch region or beyond the
+available right-side strip. Their icons then become unreachable, even though the applications are
+still running and may have no Dock window or other practical way to open their controls.
+
+The primary goal is not merely to expand and collapse hidden icons in the same already-crowded menu
+bar. That is Barkeep's current normal-click behavior and does not reliably solve notch overflow.
+The desired interaction is:
+
+1. HS chooses which important icons remain physically visible in the macOS menu bar.
+2. All remaining detected menu-bar items are available from a reliable software picker that is not
+   constrained by physical menu-bar width or the camera notch.
+3. A normal click on a small Barkeep control, preferably `...` or a similar compact symbol, opens
+   that picker immediately.
+4. The picker shows recognizable app icons and names, supports quick search, and distinguishes
+   visible items from hidden/overflow items without making the interface complicated.
+5. Clicking an item in the picker opens that item's real menu or otherwise activates the same
+   control the user would have clicked in the macOS menu bar.
+6. Arrangement and preferences remain available, but they are secondary management actions rather
+   than the primary click behavior.
+
+The intended mental model is an **overflow menu for every running menu-bar app**, not a temporary
+attempt to squeeze all hidden icons back into the physical menu bar.
+
+### Findings from the initial live inspection
+
+The upstream right-click menu currently provides Show/Hide Hidden Items, Show All Items, Find
+Item, Arrange Items, Check for Updates, and Quit. `Arrange Items` displays three columns: Always
+visible, Hidden, and Always hidden. `Find Item` already contains much of the needed mechanism: it
+scans detected menu-bar items, shows app icons and names, filters by text, and calls
+`AppCoordinator.activate(_:)`, which uses an Accessibility `AXPress` action on the selected menu-bar
+element.
+
+The installed app did not yet have macOS Accessibility permission during the initial inspection.
+Consequently, Arrange Items showed zero items in all three columns, Find Item could not populate,
+and no real inventory or behind-the-notch activation test was completed. Enabling Barkeep under
+System Settings > Privacy & Security > Accessibility is therefore the next required live-test step.
+Because this is a macOS security-setting change, obtain the user's confirmation immediately before
+changing it through UI automation.
+
+The installed app was restarted with `--show-settings` during inspection and was left running with
+its Settings window available. Its bundle identifier is `is.ian.barkeep` and its installed version
+was 0.1.1.
+
+### Recommended first customization
+
+Start with the smallest behavior change that tests the product idea:
+
+- Change a normal control-item click from `handlePrimaryClick`'s reveal/hide toggle to opening an
+  overflow picker derived from the existing search panel.
+- Keep Option-click or explicit right-click commands available for the old reveal-all behavior if
+  it remains useful.
+- Rename and simplify `Find Item` into the main overflow experience; avoid creating two overlapping
+  picker implementations.
+- Add a compact route from the picker to Arrange Items.
+- Preserve on-demand scanning and avoid a continuous Accessibility poll.
+- Verify that off-screen or notch-displaced `AXExtrasMenuBar` children remain discoverable and that
+  `AXUIElementPerformAction(..., kAXPressAction)` opens them without first forcing them into visible
+  geometry. This is the central technical hypothesis and must be tested on HS's actual crowded menu
+  bar before declaring the solution complete.
+- If AXPress fails for truly off-screen items, investigate a safe activation fallback that does not
+  depend on dragging every item into the physical bar and does not move the pointer in the
+  background. Document macOS limitations honestly rather than reporting unreachable items as
+  available.
+
+The first picker should favor clarity over feature breadth. Do not begin with a second decorative
+menu bar, styling system, scripting engine, network triggers, or automatic layout repair. Those do
+not address HS's immediate access problem.
+
+The initial source implementation of this customization was added after this handoff was written:
+normal click now opens an overflow-first picker, the picker separates Hidden & Overflow from
+Visible items, it provides search, refresh, and an Arrange Visible Items route, and the default
+control icon is an ellipsis. Live activation remains unverified until Accessibility is granted and
+a custom build can be installed.
+
+The fork also removed the upstream Sparkle package and feed. `UpdateService` is intentionally a
+disabled compatibility shim so existing conditional UI compiles while showing no update controls.
+Never restore the upstream feed: it could replace the custom app with the upstream binary.
+
+### Local development state
+
+At the time of the initial investigation, this Mac had Swift 6.3.2 and Apple Command Line Tools,
+but not a usable full Xcode installation selected for `xcodebuild`. `xcodegen` was also absent, and
+`security find-identity -p codesigning` reported no valid code-signing identities. Thus `make check`
+could not run because `xcodegen` was missing. A local ad-hoc build is supported by the upstream
+scripts, but its changing signature may cause macOS to forget Accessibility permission after
+rebuilds. Plan installation, Xcode/XcodeGen setup, bundle identity, update-feed removal or
+replacement, and signing deliberately before replacing the signed upstream app with a custom
+build.
+
+`make local-build` is a supported fallback for this specific machine. It uses `swiftc` to build the
+no-Sparkle source into `dist/Barkeep HS.app` with bundle identifier `com.hsurden.barkeep` and an
+ad-hoc signature. It deliberately does not overwrite `/Applications/Barkeep.app`. Expect macOS to
+forget Accessibility permission after some rebuilds until a stable signing identity is available.

@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 
 enum VisibilityZone: String, Codable, CaseIterable, Identifiable, Sendable {
     case alwaysVisible
@@ -18,8 +19,31 @@ enum VisibilityZone: String, Codable, CaseIterable, Identifiable, Sendable {
     var help: String {
         switch self {
         case .alwaysVisible: "Barkeep never hides these items."
-        case .hidden: "Click the Barkeep icon to show or hide these items."
-        case .alwaysHidden: "Barkeep shows these items only when you ask."
+        case .hidden: "Available in the picker and with the show/hide shortcut."
+        case .alwaysHidden: "Available in the picker without taking menu bar space."
+        }
+    }
+}
+
+enum MenuBarMode: String, Codable, CaseIterable, Identifiable, Sendable {
+    case overflowShelf
+    case classic
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .overflowShelf: "Overflow shelf"
+        case .classic: "Classic hide and reveal"
+        }
+    }
+
+    var help: String {
+        switch self {
+        case .overflowShelf:
+            "Every icon stays in the menu bar until it overflows. The shelf lists overflowed and Always hidden items."
+        case .classic:
+            "Barkeep hides the items you put in the Hidden and Always hidden sections, with the reveal shortcut and boundaries."
         }
     }
 }
@@ -53,7 +77,7 @@ enum BarkeepIconStyle: String, Codable, CaseIterable, Identifiable, Sendable {
 struct BarkeepSettings: Codable, Equatable, Sendable {
     var launchAtLogin = false
     var showDockIcon = false
-    var iconStyle: BarkeepIconStyle = .dot
+    var iconStyle: BarkeepIconStyle = .ellipsis
     var autoRehide = true
     var rehideDelay: TimeInterval = 5
     var hideOnAppChange = false
@@ -74,6 +98,11 @@ struct BarkeepSettings: Codable, Equatable, Sendable {
     var reduceItemSpacing = false
     var itemSpacing = 4
     var itemPadding = 4
+
+    // Optional so documents saved before this field existed keep decoding.
+    var menuBarMode: MenuBarMode?
+
+    var mode: MenuBarMode { menuBarMode ?? .overflowShelf }
 }
 
 struct ItemRule: Codable, Hashable, Identifiable, Sendable {
@@ -101,12 +130,23 @@ struct BarkeepProfile: Codable, Identifiable, Sendable {
     }
 }
 
+/// One ranked entry in the overflow-shelf priority order. Rank 1 is the
+/// rightmost menu bar position, which macOS occludes last on a notched display.
+struct PriorityEntry: Codable, Hashable, Identifiable, Sendable {
+    let id: String
+    var displayName: String
+    var ownerName: String
+    var bundleIdentifier: String?
+}
+
 struct BarkeepDocument: Codable, Sendable {
     var version = 1
     var settings = BarkeepSettings()
     var rules: [String: ItemRule] = [:]
     var groups: [String] = []
     var profiles: [BarkeepProfile] = []
+    // Optional so documents saved before this field existed keep decoding.
+    var priorityOrder: [PriorityEntry]?
 }
 
 struct MenuBarItemSnapshot: Identifiable, Hashable, Sendable {
@@ -116,6 +156,34 @@ struct MenuBarItemSnapshot: Identifiable, Hashable, Sendable {
     let bundleIdentifier: String?
     let frame: CGRect
     let isEnabled: Bool
+}
+
+struct MenuBarPickerContents {
+    let overflow: [MenuBarItemSnapshot]
+    let visible: [MenuBarItemSnapshot]
+
+    init(
+        items: [MenuBarItemSnapshot],
+        query: String,
+        zoneFor: (MenuBarItemSnapshot) -> VisibilityZone
+    ) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidates = items.filter { item in
+            guard !item.isPinnedByMacOS else { return false }
+            guard !trimmed.isEmpty else { return true }
+            return item.displayName.localizedCaseInsensitiveContains(trimmed) ||
+                item.ownerName.localizedCaseInsensitiveContains(trimmed)
+        }
+        let sorted = candidates.sorted { lhs, rhs in
+            let nameOrder = lhs.displayName.localizedCaseInsensitiveCompare(rhs.displayName)
+            if nameOrder != .orderedSame { return nameOrder == .orderedAscending }
+            return lhs.ownerName.localizedCaseInsensitiveCompare(rhs.ownerName) == .orderedAscending
+        }
+        overflow = sorted.filter { zoneFor($0) != .alwaysVisible }
+        visible = sorted.filter { zoneFor($0) == .alwaysVisible }
+    }
+
+    var isEmpty: Bool { overflow.isEmpty && visible.isEmpty }
 }
 
 extension MenuBarItemSnapshot {
@@ -145,7 +213,9 @@ struct BoundaryFrames: Sendable {
     }
 
     func targetPoint(for zone: VisibilityZone) -> CGPoint? {
-        guard alwaysHidden.midX < hidden.midX,
+        // The two boundary frames coincide in overflow-shelf mode, where the
+        // Always hidden boundary doubles as the hidden boundary.
+        guard alwaysHidden.midX <= hidden.midX,
               hidden.midX < control.midX else {
             return nil
         }
@@ -205,6 +275,7 @@ enum BarkeepError: LocalizedError {
     case itemNotFound
     case itemNotRevealed
     case itemPinnedByMacOS
+    case itemOccluded
     case menuBarFull
     case boundariesUnavailable
     case invalidGeometry
@@ -217,6 +288,7 @@ enum BarkeepError: LocalizedError {
         case .itemNotFound: "Barkeep could not find this item in the current menu bar."
         case .itemNotRevealed: "This item did not appear on the screen. Barkeep kept the old section."
         case .itemPinnedByMacOS: "macOS keeps this item on the right side. Barkeep cannot move it."
+        case .itemOccluded: "macOS hides this item behind the notch, so Barkeep cannot grab it to move it. Quit or rearrange other menu bar apps to free space, then apply the order again."
         case .menuBarFull: "The menu bar is full, and macOS hides this spot behind the notch. Close some menu bar apps or turn on tighter spacing, then try again."
         case .boundariesUnavailable: "Barkeep could not find its section boundaries."
         case .invalidGeometry: "The current menu bar layout is not safe for this move."

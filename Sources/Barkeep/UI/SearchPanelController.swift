@@ -8,12 +8,12 @@ final class SearchPanelController: NSWindowController, NSWindowDelegate {
     init(coordinator: AppCoordinator) {
         let rootView = SearchPanelView(coordinator: coordinator)
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 430),
+            contentRect: NSRect(x: 0, y: 0, width: 440, height: 520),
             styleMask: [.titled, .closable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
-        panel.title = "Find a menu bar item"
+        panel.title = "Menu Bar Items"
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
         panel.isFloatingPanel = true

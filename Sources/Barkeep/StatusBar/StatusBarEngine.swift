@@ -15,8 +15,9 @@ final class StatusBarEngine: NSObject {
     private let statusBar = NSStatusBar.system
     private let controlItem: NSStatusItem
     private let hiddenBoundary: NSStatusItem
-    private let alwaysHiddenBoundary: NSStatusItem
+    private var alwaysHiddenBoundary: NSStatusItem
     private var iconStyle: BarkeepIconStyle = .dot
+    private(set) var mode: MenuBarMode = .classic
 
     private static let openBoundaryLength: CGFloat = 14
     private static let closedBoundaryLength: CGFloat = 10_000
@@ -32,7 +33,7 @@ final class StatusBarEngine: NSObject {
         alwaysHiddenBoundary = statusBar.statusItem(withLength: Self.openBoundaryLength)
         super.init()
 
-        configure(controlItem, name: Self.controlAutosaveName, label: "Barkeep")
+        configure(controlItem, name: Self.controlAutosaveName, label: "Open menu bar item picker")
         configure(hiddenBoundary, name: Self.hiddenBoundaryAutosaveName, label: "Hidden items boundary")
         configure(
             alwaysHiddenBoundary,
@@ -43,7 +44,7 @@ final class StatusBarEngine: NSObject {
         controlItem.button?.target = self
         controlItem.button?.action = #selector(handleControlClick(_:))
         controlItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        controlItem.button?.toolTip = "Barkeep"
+        controlItem.button?.toolTip = "Open menu bar item picker"
 
         hiddenBoundary.button?.image = BarkeepIconFactory.dividerImage()
         hiddenBoundary.button?.alphaValue = 0.7
@@ -70,6 +71,66 @@ final class StatusBarEngine: NSObject {
     func setIconStyle(_ style: BarkeepIconStyle) {
         iconStyle = style
         updateControlImage()
+    }
+
+    /// In overflow-shelf mode there is no reveal-toggle "Hidden" section, so
+    /// its boundary leaves the menu bar. The Always hidden boundary stays and
+    /// keeps working: shelf mode is "everything visible until it overflows,
+    /// plus one Always hidden bucket". The resting state is .revealed, which
+    /// keeps the Always hidden section closed and everything else inline.
+    func setMode(_ newMode: MenuBarMode) {
+        guard newMode != mode else { return }
+        mode = newMode
+        switch newMode {
+        case .overflowShelf:
+            hiddenBoundary.isVisible = false
+            alwaysHiddenBoundary.isVisible = true
+            setState(.revealed)
+        case .classic:
+            hiddenBoundary.isVisible = true
+            alwaysHiddenBoundary.isVisible = true
+            setState(.hidden)
+        }
+    }
+
+    /// The control item's window frame in AppKit screen coordinates, used to
+    /// anchor the overflow shelf under the menu bar.
+    func controlScreenFrame() -> CGRect? {
+        controlItem.button?.window?.frame
+    }
+
+    /// The Always hidden boundary's window frame in AppKit screen
+    /// coordinates. Hidden items reveal immediately left of this spot, and
+    /// their real menus drop from there, so the shelf anchors below it.
+    func alwaysHiddenBoundaryScreenFrame() -> CGRect? {
+        alwaysHiddenBoundary.button?.window?.frame
+    }
+
+    /// Temporarily shrinks the control to free drawable menu bar space during
+    /// a full-bar hide. Pass nil to restore the normal width.
+    func setControlLength(_ length: CGFloat?) {
+        controlItem.length = length ?? NSStatusItem.squareLength
+    }
+
+    /// Moves the Always hidden boundary by recreating it at a saved preferred
+    /// position. The boundary is Barkeep's own item, so this needs no drag and
+    /// works even while the boundary sits behind the notch. The offset is
+    /// measured in points from the right edge of the screen.
+    func repositionAlwaysHiddenBoundary(preferredRightOffset: CGFloat) {
+        UserDefaults.standard.set(
+            Double(preferredRightOffset),
+            forKey: "NSStatusItem Preferred Position \(Self.alwaysHiddenBoundaryAutosaveName)"
+        )
+        statusBar.removeStatusItem(alwaysHiddenBoundary)
+        alwaysHiddenBoundary = statusBar.statusItem(withLength: Self.openBoundaryLength)
+        configure(
+            alwaysHiddenBoundary,
+            name: Self.alwaysHiddenBoundaryAutosaveName,
+            label: "Always hidden items boundary"
+        )
+        alwaysHiddenBoundary.button?.image = BarkeepIconFactory.dividerImage()
+        alwaysHiddenBoundary.button?.alphaValue = 0.5
+        setState(state)
     }
 
     func toggleHidden() {
@@ -108,17 +169,37 @@ final class StatusBarEngine: NSObject {
             hiddenBoundary.length = Self.openBoundaryLength
         }
         hiddenBoundary.button?.image = newState == .hidden ? nil : BarkeepIconFactory.dividerImage()
-        alwaysHiddenBoundary.button?.image = newState == .revealed ? nil : BarkeepIconFactory.dividerImage()
+        if mode == .overflowShelf {
+            // No divider glyph in shelf mode, even during a transient reveal.
+            alwaysHiddenBoundary.button?.image = nil
+        } else {
+            alwaysHiddenBoundary.button?.image =
+                newState == .revealed ? nil : BarkeepIconFactory.dividerImage()
+        }
         updateControlImage()
     }
 
     func boundaryFrames() -> BoundaryFrames? {
         guard let control = controlItem.button?.window?.frame,
-              let hidden = hiddenBoundary.button?.window?.frame,
               let alwaysHidden = alwaysHiddenBoundary.button?.window?.frame,
               control.width > 0,
-              hidden.width > 0,
               alwaysHidden.width > 0 else {
+            return nil
+        }
+        if mode == .overflowShelf {
+            // Shelf mode has no reveal-toggle section: the Always hidden
+            // boundary doubles as the hidden boundary, giving two zones. The
+            // closed boundary is thousands of points wide, so its LEFT edge is
+            // the meaningful divider; a midpoint would misclassify items.
+            let edge = CGRect(
+                x: alwaysHidden.minX,
+                y: alwaysHidden.minY,
+                width: min(alwaysHidden.width, 30),
+                height: alwaysHidden.height
+            )
+            return BoundaryFrames(control: control, hidden: edge, alwaysHidden: edge)
+        }
+        guard let hidden = hiddenBoundary.button?.window?.frame, hidden.width > 0 else {
             return nil
         }
         return BoundaryFrames(control: control, hidden: hidden, alwaysHidden: alwaysHidden)

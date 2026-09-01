@@ -204,13 +204,68 @@ final class BarkeepTests: XCTestCase {
 
     func testDefaultProductRules() {
         let settings = BarkeepSettings()
-        XCTAssertEqual(settings.iconStyle, .dot)
+        XCTAssertEqual(settings.iconStyle, .ellipsis)
         XCTAssertTrue(settings.autoRehide)
         XCTAssertEqual(settings.rehideDelay, 5)
         XCTAssertFalse(settings.showOnHover)
         XCTAssertFalse(settings.showOnScroll)
         XCTAssertFalse(settings.requireAuthentication)
         XCTAssertFalse(settings.reduceItemSpacing)
+    }
+
+    func testPickerPrioritizesOverflowAndFiltersPinnedItems() {
+        func item(_ name: String, id: String? = nil) -> MenuBarItemSnapshot {
+            MenuBarItemSnapshot(
+                id: id ?? "com.example.\(name.lowercased())|status",
+                displayName: name,
+                ownerName: "\(name) App",
+                bundleIdentifier: id == nil ? "com.example.\(name.lowercased())" : "com.apple.controlcenter",
+                frame: CGRect(x: 10, y: 10, width: 20, height: 20),
+                isEnabled: true
+            )
+        }
+
+        let hidden = item("Hidden")
+        let alwaysHidden = item("Archive")
+        let visible = item("Visible")
+        let pinnedClock = item(
+            "Clock",
+            id: "com.apple.controlcenter|com.apple.menuextra.clock"
+        )
+        let zones: [String: VisibilityZone] = [
+            hidden.id: .hidden,
+            alwaysHidden.id: .alwaysHidden,
+            visible.id: .alwaysVisible,
+            pinnedClock.id: .alwaysVisible,
+        ]
+
+        let contents = MenuBarPickerContents(
+            items: [visible, hidden, pinnedClock, alwaysHidden],
+            query: ""
+        ) { zones[$0.id] ?? .alwaysVisible }
+
+        XCTAssertEqual(contents.overflow.map(\.displayName), ["Archive", "Hidden"])
+        XCTAssertEqual(contents.visible.map(\.displayName), ["Visible"])
+        XCTAssertFalse(contents.isEmpty)
+    }
+
+    func testPickerSearchesDisplayAndOwnerNames() {
+        let item = MenuBarItemSnapshot(
+            id: "com.example.sync|status",
+            displayName: "Connection",
+            ownerName: "Cloud Sync",
+            bundleIdentifier: "com.example.sync",
+            frame: CGRect(x: 10, y: 10, width: 20, height: 20),
+            isEnabled: true
+        )
+
+        let displayMatch = MenuBarPickerContents(items: [item], query: "connect") { _ in .hidden }
+        let ownerMatch = MenuBarPickerContents(items: [item], query: "cloud") { _ in .hidden }
+        let noMatch = MenuBarPickerContents(items: [item], query: "battery") { _ in .hidden }
+
+        XCTAssertEqual(displayMatch.overflow, [item])
+        XCTAssertEqual(ownerMatch.overflow, [item])
+        XCTAssertTrue(noMatch.isEmpty)
     }
 
     @MainActor
@@ -311,6 +366,176 @@ final class BarkeepTests: XCTestCase {
         XCTAssertTrue(store.settings.showOnHover)
         XCTAssertGreaterThanOrEqual(notifications, 1)
         withExtendedLifetime(subscription) {}
+    }
+
+    private func snapshot(
+        _ name: String,
+        x: CGFloat,
+        width: CGFloat = 30,
+        bundle: String? = nil,
+        stablePart: String = "status"
+    ) -> MenuBarItemSnapshot {
+        let bundleID = bundle ?? "com.example.\(name.lowercased())"
+        return MenuBarItemSnapshot(
+            id: "\(bundleID)|\(stablePart)",
+            displayName: name,
+            ownerName: name,
+            bundleIdentifier: bundleID,
+            frame: CGRect(x: x, y: 4, width: width, height: 24),
+            isEnabled: true
+        )
+    }
+
+    private var notchedScreen: ScreenGeometry {
+        ScreenGeometry(
+            coordinates: ScreenCoordinateSpace(
+                appKitFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
+                quartzFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117)
+            ),
+            statusAreaMinX: 1010
+        )
+    }
+
+    func testOverflowClassification() {
+        let screens = [notchedScreen]
+
+        XCTAssertFalse(OverflowClassifier.isOverflowed(
+            frame: CGRect(x: 1200, y: 4, width: 30, height: 24), screens: screens
+        ))
+        // Laid out behind the notch: on screen, but left of the status area.
+        XCTAssertTrue(OverflowClassifier.isOverflowed(
+            frame: CGRect(x: 900, y: 4, width: 30, height: 24), screens: screens
+        ))
+        // Pushed past the display entirely.
+        XCTAssertTrue(OverflowClassifier.isOverflowed(
+            frame: CGRect(x: -200, y: 4, width: 30, height: 24), screens: screens
+        ))
+        // Not on the menu bar strip at all.
+        XCTAssertTrue(OverflowClassifier.isOverflowed(
+            frame: CGRect(x: 1200, y: 500, width: 30, height: 24), screens: screens
+        ))
+
+        let ids = OverflowClassifier.overflowedIDs(
+            items: [snapshot("Safe", x: 1200), snapshot("Notched", x: 900)],
+            screens: screens
+        )
+        XCTAssertEqual(ids, ["com.example.notched|status"])
+    }
+
+    func testFlatDisplayHasNoNotchOverflow() {
+        let flat = ScreenGeometry(
+            coordinates: ScreenCoordinateSpace(
+                appKitFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080),
+                quartzFrame: CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            )
+        )
+        XCTAssertFalse(OverflowClassifier.isOverflowed(
+            frame: CGRect(x: 100, y: 4, width: 30, height: 24), screens: [flat]
+        ))
+    }
+
+    func testOrderPlannerMovesItemToRankPosition() {
+        let clock = snapshot(
+            "Clock",
+            x: 1650,
+            bundle: "com.apple.controlcenter",
+            stablePart: "com.apple.menuextra.clock"
+        )
+        let a = snapshot("Alpha", x: 1600)
+        let b = snapshot("Beta", x: 1560)
+        let c = snapshot("Gamma", x: 1520)
+        let all = [c, a, clock, b]
+
+        let movable = OrderPlanner.movableRightToLeft(all)
+        XCTAssertEqual(movable.map(\.displayName), ["Alpha", "Beta", "Gamma"])
+        XCTAssertEqual(OrderPlanner.rightAnchorMinX(all), clock.frame.minX)
+
+        // Alpha already holds rank 0.
+        XCTAssertTrue(OrderPlanner.isInPlace(itemID: a.id, rank: 0, movableRightToLeft: movable))
+        XCTAssertNil(OrderPlanner.moveTarget(
+            itemID: a.id, rank: 0, movableRightToLeft: movable, rightAnchorMinX: clock.frame.minX
+        ))
+
+        // Gamma wants rank 0: drop just left of the pinned cluster.
+        let target = OrderPlanner.moveTarget(
+            itemID: c.id, rank: 0, movableRightToLeft: movable, rightAnchorMinX: clock.frame.minX
+        )
+        XCTAssertEqual(target, CGPoint(x: clock.frame.minX - 6, y: a.frame.midY))
+
+        // Gamma wants rank 1: drop just left of the current rank-0 item.
+        let secondTarget = OrderPlanner.moveTarget(
+            itemID: c.id, rank: 1, movableRightToLeft: movable, rightAnchorMinX: clock.frame.minX
+        )
+        XCTAssertEqual(secondTarget, CGPoint(x: a.frame.minX - 6, y: b.frame.midY))
+
+        // A rank beyond the movable count cannot be planned.
+        XCTAssertNil(OrderPlanner.moveTarget(
+            itemID: c.id, rank: 5, movableRightToLeft: movable, rightAnchorMinX: clock.frame.minX
+        ))
+    }
+
+    func testOrderPlannerAnchorsWithoutPinnedItems() {
+        let a = snapshot("Alpha", x: 1600)
+        let b = snapshot("Beta", x: 1500)
+        XCTAssertEqual(OrderPlanner.rightAnchorMinX([b, a]), a.frame.maxX)
+    }
+
+    func testShelfModeCoincidingBoundaries() {
+        // In overflow-shelf mode the Always hidden boundary doubles as the
+        // hidden boundary, leaving exactly two zones.
+        let boundaries = BoundaryFrames(
+            control: CGRect(x: 900, y: 876, width: 20, height: 24),
+            hidden: CGRect(x: 700, y: 876, width: 14, height: 24),
+            alwaysHidden: CGRect(x: 700, y: 876, width: 14, height: 24)
+        )
+
+        XCTAssertEqual(
+            boundaries.targetPoint(for: .alwaysVisible),
+            CGPoint(x: 807, y: 888)
+        )
+        XCTAssertNil(boundaries.targetPoint(for: .hidden))
+        XCTAssertEqual(
+            boundaries.targetPoint(for: .alwaysHidden),
+            CGPoint(x: 682, y: 888)
+        )
+        XCTAssertEqual(
+            boundaries.zone(for: CGRect(x: 800, y: 876, width: 20, height: 24)),
+            .alwaysVisible
+        )
+        XCTAssertEqual(
+            boundaries.zone(for: CGRect(x: 500, y: 876, width: 20, height: 24)),
+            .alwaysHidden
+        )
+    }
+
+    func testOldDocumentsDecodeWithoutNewFields() throws {
+        let old = """
+        {"version":1,"settings":{"launchAtLogin":false,"showDockIcon":false,"iconStyle":"ellipsis","autoRehide":true,"rehideDelay":5,"hideOnAppChange":false,"showOnHover":false,"hoverDelay":1,"showOnScroll":false,"showOnMenuBarClick":true,"requireAuthentication":false,"showOnLowBattery":false,"lowBatteryLevel":20,"alwaysShowOnExternalDisplay":false,"useCustomAppearance":false,"appearanceOpacity":0.16,"appearanceCornerRadius":8,"appearanceBorder":false,"reduceItemSpacing":false,"itemSpacing":4,"itemPadding":4},"rules":{},"groups":[],"profiles":[]}
+        """
+        let document = try JSONDecoder().decode(BarkeepDocument.self, from: Data(old.utf8))
+        XCTAssertNil(document.settings.menuBarMode)
+        XCTAssertEqual(document.settings.mode, .overflowShelf)
+        XCTAssertNil(document.priorityOrder)
+    }
+
+    @MainActor
+    func testPriorityOrderRoundTrip() {
+        let baseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let alpha = snapshot("Alpha", x: 100)
+        let beta = snapshot("Beta", x: 200)
+
+        let first = StateStore(baseURL: baseURL)
+        first.addPriority(for: alpha)
+        first.addPriority(for: beta)
+        first.addPriority(for: alpha)
+        XCTAssertEqual(first.priorityOrder.map(\.displayName), ["Alpha", "Beta"])
+        first.movePriority(fromOffsets: IndexSet(integer: 1), toOffset: 0)
+
+        let second = StateStore(baseURL: baseURL)
+        XCTAssertEqual(second.priorityOrder.map(\.displayName), ["Beta", "Alpha"])
+        second.removePriority(id: alpha.id)
+        XCTAssertEqual(second.priorityOrder.map(\.displayName), ["Beta"])
     }
 
     func testAllIconsRenderAtNativeSize() {

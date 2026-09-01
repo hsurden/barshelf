@@ -36,6 +36,32 @@ struct SettingsView: View {
     }
 }
 
+/// Zone labels differ by mode: shelf mode has no reveal-toggle "Hidden"
+/// section, so it offers two zones with wording that matches the shelf.
+enum ZonePresentation {
+    static func zones(for mode: MenuBarMode) -> [VisibilityZone] {
+        mode == .overflowShelf ? [.alwaysVisible, .alwaysHidden] : VisibilityZone.allCases
+    }
+
+    static func title(for zone: VisibilityZone, mode: MenuBarMode) -> String {
+        guard mode == .overflowShelf else { return zone.title }
+        switch zone {
+        case .alwaysVisible: return "In the menu bar"
+        case .hidden: return zone.title
+        case .alwaysHidden: return "Always hidden"
+        }
+    }
+
+    static func help(for zone: VisibilityZone, mode: MenuBarMode) -> String {
+        guard mode == .overflowShelf else { return zone.help }
+        switch zone {
+        case .alwaysVisible: return "Drag to reorder. The top item stays rightmost, safest from the notch."
+        case .hidden: return zone.help
+        case .alwaysHidden: return "Kept out of the menu bar. Open it from the shelf or the picker."
+        }
+    }
+}
+
 private struct ItemsSettingsView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -45,17 +71,30 @@ private struct ItemsSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Menu bar items")
                         .font(.title2.weight(.semibold))
-                    Text("Put each item in one clear section.")
+                    Text(coordinator.menuBarMode == .overflowShelf
+                         ? "Drag to reorder the bar. Use an item's menu to hide or unhide it."
+                         : "Put each item in one clear section.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                if coordinator.isScanning {
+                if coordinator.isScanning || coordinator.isApplyingOrder {
                     ProgressView().controlSize(.small)
                 }
                 Button("Refresh") {
                     Task { await coordinator.refreshItems(promptForPermission: true) }
                 }
                 .disabled(coordinator.isScanning || coordinator.movingItemID != nil)
+                if coordinator.menuBarMode == .overflowShelf, coordinator.pendingHideCount > 0 {
+                    Button("Reapply Hidden Items") {
+                        Task { await coordinator.reapplyHiddenItems() }
+                    }
+                    .disabled(
+                        coordinator.isScanning ||
+                        coordinator.isApplyingOrder ||
+                        coordinator.movingItemID != nil
+                    )
+                    .help("Retry hiding the items macOS put back into the bar")
+                }
             }
 
             if !AccessibilityPermission.isGranted {
@@ -70,7 +109,7 @@ private struct ItemsSettingsView: View {
             }
 
             HStack(alignment: .top, spacing: 12) {
-                ForEach(VisibilityZone.allCases) { zone in
+                ForEach(ZonePresentation.zones(for: coordinator.menuBarMode)) { zone in
                     ZoneColumn(zone: zone, coordinator: coordinator)
                 }
             }
@@ -89,34 +128,62 @@ private struct ZoneColumn: View {
     @ObservedObject var coordinator: AppCoordinator
 
     private var zoneItems: [MenuBarItemSnapshot] {
-        coordinator.items(in: zone)
+        coordinator.itemsForSettings(in: zone)
+    }
+
+    /// Shelf mode's in-bar column reorders the real bar by drag.
+    private var isReorderColumn: Bool {
+        coordinator.menuBarMode == .overflowShelf && zone == .alwaysVisible
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(zone.title).font(.headline)
+                Text(ZonePresentation.title(for: zone, mode: coordinator.menuBarMode))
+                    .font(.headline)
                 Spacer()
                 Text("\(zoneItems.count)")
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Text(zone.help)
+            Text(ZonePresentation.help(for: zone, mode: coordinator.menuBarMode))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(height: 34, alignment: .topLeading)
             Divider()
-            ScrollView {
-                LazyVStack(spacing: 5) {
+            if isReorderColumn {
+                List {
                     ForEach(zoneItems) { item in
                         ItemRow(item: item, coordinator: coordinator)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                            .listRowSeparator(.hidden)
+                            .listRowBackground(Color.clear)
                     }
-                    if zoneItems.isEmpty {
-                        Text("Drop an item here")
-                            .foregroundStyle(.tertiary)
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 28)
+                    .onMove { offsets, destination in
+                        guard let sourceOffset = offsets.first else { return }
+                        let moved = zoneItems[sourceOffset]
+                        var reordered = zoneItems
+                        reordered.move(fromOffsets: offsets, toOffset: destination)
+                        guard let rank = reordered.firstIndex(of: moved),
+                              rank != sourceOffset else { return }
+                        Task { await coordinator.reorderItem(moved, toRank: rank) }
+                    }
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 5) {
+                        ForEach(zoneItems) { item in
+                            ItemRow(item: item, coordinator: coordinator)
+                        }
+                        if zoneItems.isEmpty {
+                            Text(isShelfMode ? "Nothing is hidden" : "Drop an item here")
+                                .foregroundStyle(.tertiary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 28)
+                        }
                     }
                 }
             }
@@ -135,6 +202,8 @@ private struct ZoneColumn: View {
             return true
         }
     }
+
+    private var isShelfMode: Bool { coordinator.menuBarMode == .overflowShelf }
 }
 
 private struct ItemRow: View {
@@ -154,13 +223,19 @@ private struct ItemRow: View {
                         .lineLimit(1)
                 }
             }
+            if coordinator.isPendingHide(item) {
+                Text("still visible")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .help("macOS put this item back in the bar. Use Reapply Hidden Items to retry.")
+            }
             Spacer(minLength: 2)
             if coordinator.movingItemID == item.id {
                 ProgressView().controlSize(.small)
             } else {
                 Menu {
-                    ForEach(VisibilityZone.allCases) { zone in
-                        Button(zone.title) {
+                    ForEach(ZonePresentation.zones(for: coordinator.menuBarMode)) { zone in
+                        Button(ZonePresentation.title(for: zone, mode: coordinator.menuBarMode)) {
                             Task { await coordinator.moveItem(item, to: zone) }
                         }
                     }
@@ -214,6 +289,18 @@ private struct BehaviorSettingsView: View {
 
     var body: some View {
         Form {
+            Section("Menu bar mode") {
+                Picker("Mode", selection: modeBinding) {
+                    ForEach(MenuBarMode.allCases) { mode in
+                        Text(mode.title).tag(mode)
+                    }
+                }
+                .pickerStyle(.radioGroup)
+                Text(store.settings.mode.help)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if store.settings.mode == .classic {
             Section("Show and hide") {
                 SettingsToggle("Hide items again", isOn: setting(\.autoRehide))
                 if store.settings.autoRehide {
@@ -247,6 +334,7 @@ private struct BehaviorSettingsView: View {
                     isOn: setting(\.alwaysShowOnExternalDisplay)
                 )
             }
+            }
             Section("Privacy") {
                 SettingsToggle(
                     "Use Touch ID or the Mac password before reveal",
@@ -258,12 +346,27 @@ private struct BehaviorSettingsView: View {
                 SettingsToggle("Show Barkeep in the Dock", isOn: setting(\.showDockIcon))
             }
             Section("Keyboard shortcuts") {
-                LabeledContent("Show or hide items", value: "⌘\\")
-                LabeledContent("Find an item", value: "⌘⇧Space")
+                LabeledContent(
+                    store.settings.mode == .overflowShelf
+                        ? "Open or close the shelf"
+                        : "Show or hide items",
+                    value: "⌘\\"
+                )
+                LabeledContent("Open item picker", value: "⌘⇧Space")
             }
         }
         .formStyle(.grouped)
         .padding(12)
+    }
+
+    private var modeBinding: Binding<MenuBarMode> {
+        Binding(
+            get: { store.settings.mode },
+            set: { value in
+                store.updateSettings { $0.menuBarMode = value }
+                coordinator.settingsDidChange()
+            }
+        )
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<BarkeepSettings, Value>) -> Binding<Value> {
