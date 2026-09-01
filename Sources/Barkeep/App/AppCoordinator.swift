@@ -12,6 +12,14 @@ private struct MoveConfirmation {
     let boundaries: BoundaryFrames
 }
 
+private enum ActivationPhase: Equatable {
+    case resting
+    case shelfOpen
+    case revealing(String)
+    case menuOpen(String)
+    case restoring
+}
+
 @MainActor
 final class AppCoordinator: NSObject, ObservableObject {
     let store: StateStore
@@ -20,6 +28,8 @@ final class AppCoordinator: NSObject, ObservableObject {
     @Published private(set) var items: [MenuBarItemSnapshot] = []
     @Published private(set) var itemZones: [String: VisibilityZone] = [:]
     @Published private(set) var overflowIDs: Set<String> = []
+    @Published private(set) var shelfSessionItems: [MenuBarItemSnapshot] = []
+    @Published private(set) var isPreparingShelf = false
     @Published private(set) var isScanning = false
     @Published private(set) var isApplyingOrder = false
     @Published private(set) var movingItemID: String?
@@ -35,7 +45,12 @@ final class AppCoordinator: NSObject, ObservableObject {
     private var searchPanel: SearchPanelController?
     private var shelfPanel: ShelfPanelController?
     private var shelfClosedAt: Date?
+    private var activationPhase: ActivationPhase = .resting
+    private var shelfInventory = ShelfInventory()
     private var rehideTask: Task<Void, Never>?
+    private var interactionEscapeMonitor: Any?
+    private var interactionEndContinuation: CheckedContinuation<Void, Never>?
+    private var interactionDidEnd = false
     private var authenticationContext: LAContext?
     private var permissionObserver: NSObjectProtocol?
 
@@ -143,6 +158,10 @@ final class AppCoordinator: NSObject, ObservableObject {
         showSettings()
     }
 
+    func quitApp() {
+        NSApp.terminate(nil)
+    }
+
     private func applyActivationPolicy() {
         let keepRegular = settingsWindow != nil || store.settings.showDockIcon
         NSApp.setActivationPolicy(keepRegular ? .regular : .accessory)
@@ -175,7 +194,9 @@ final class AppCoordinator: NSObject, ObservableObject {
     }
 
     func showShelf() {
-        guard menuBarMode == .overflowShelf, movingItemID == nil else { return }
+        guard menuBarMode == .overflowShelf,
+              movingItemID == nil,
+              activationPhase == .resting else { return }
         guard canRevealWithoutPrompt || !store.settings.requireAuthentication else {
             authenticate { [weak self] in self?.showShelf() }
             return
@@ -186,11 +207,20 @@ final class AppCoordinator: NSObject, ObservableObject {
         rehideTask = nil
         let wasRevealed = statusBar.state == .revealedAll
         statusBar.setState(.revealed)
+        activationPhase = .shelfOpen
+        shelfSessionItems = []
+        isPreparingShelf = true
         if shelfPanel == nil {
             let controller = ShelfPanelController(coordinator: self)
             controller.onClose = { [weak self] in
-                self?.shelfPanel = nil
-                self?.shelfClosedAt = Date()
+                guard let self else { return }
+                self.shelfPanel = nil
+                self.shelfClosedAt = Date()
+                self.shelfSessionItems = []
+                self.isPreparingShelf = false
+                if self.activationPhase == .shelfOpen {
+                    self.activationPhase = .resting
+                }
             }
             shelfPanel = controller
         }
@@ -203,6 +233,16 @@ final class AppCoordinator: NSObject, ObservableObject {
                 try? await Task.sleep(for: .milliseconds(400))
             }
             await refreshItems(promptForPermission: true)
+            guard activationPhase == .shelfOpen else { return }
+            let hiddenIDs = Set(shelfInventory.items.compactMap {
+                intentZone(for: $0) == .alwaysHidden ? $0.id : nil
+            })
+            shelfSessionItems = ShelfSessionModel.items(
+                from: shelfInventory.items,
+                overflowIDs: shelfInventory.overflowIDs,
+                intentionallyHiddenIDs: hiddenIDs
+            )
+            isPreparingShelf = false
         }
     }
 
@@ -223,6 +263,7 @@ final class AppCoordinator: NSObject, ObservableObject {
         }
 
         isScanning = true
+        defer { isScanning = false }
         let result: [MenuBarItemSnapshot]
         if menuBarMode == .overflowShelf {
             // Only the Always hidden section exists in shelf mode, and its
@@ -239,14 +280,12 @@ final class AppCoordinator: NSObject, ObservableObject {
             itemZones = zones(for: result, boundaries: boundaries)
             statusBar.setState(previousState)
         }
-        overflowIDs = OverflowClassifier.overflowedIDs(items: result, screens: screenGeometries())
-        items = result
-        isScanning = false
+        applyScanResult(result)
         message = result.isEmpty ? "Barkeep did not find any menu bar items." : nil
     }
 
     func isOverflowed(_ item: MenuBarItemSnapshot) -> Bool {
-        overflowIDs.contains(item.id)
+        overflowIDs.contains(item.id) || shelfInventory.overflowIDs.contains(item.id)
     }
 
     func currentZone(for item: MenuBarItemSnapshot) -> VisibilityZone {
@@ -572,37 +611,106 @@ final class AppCoordinator: NSObject, ObservableObject {
     }
 
     func activate(_ item: MenuBarItemSnapshot) async {
-        // Pressing an off-screen item can report success without any visible
-        // menu, so hidden and overflowed items are revealed first and pressed
-        // at a real on-screen position.
-        if !isOverflowed(item) {
-            let pressed = await scanner.press(itemID: item.id)
-            // AXPress on a menu bar item can block until the menu closes or
-            // report failure while the menu did open, so an open menu counts
-            // as success.
-            if pressed || Self.menuIsOpen() {
-                closePickers()
-                scheduleRehide()
+        guard movingItemID == nil else { return }
+        guard activationPhase == .resting || activationPhase == .shelfOpen else { return }
+
+        let previousState = statusBar.state
+        activationPhase = .revealing(item.id)
+        rehideTask?.cancel()
+        rehideTask = nil
+        closePickers()
+
+        var target = item
+        let needsReveal = isOverflowed(item) || intentZone(for: item) == .alwaysHidden
+        if needsReveal {
+            statusBar.revealAll()
+            try? await Task.sleep(for: .milliseconds(180))
+            let rescanned = await scanner.scan(apps: runningApps())
+            applyScanResult(rescanned)
+            guard let refreshed = rescanned.first(where: { matches($0, item) }) else {
+                message = BarkeepError.itemNotFound.localizedDescription
+                await restoreAfterActivation(previousState: previousState)
                 return
             }
+            target = refreshed
         }
-        statusBar.revealAll()
-        try? await Task.sleep(for: .milliseconds(140))
-        await refreshItems(promptForPermission: true)
-        var opened = false
-        if let refreshed = items.first(where: { matches($0, item) }) {
-            opened = await scanner.press(itemID: refreshed.id)
-        }
-        if opened || Self.menuIsOpen() {
-            closePickers()
-            // Shelf mode keeps the activated item in the bar so it can keep
-            // being used; it tucks back the next time the shelf opens.
-            if menuBarMode != .overflowShelf {
-                scheduleRehide()
+
+        beginInteractionSession(itemID: target.id)
+        _ = await scanner.press(itemID: target.id)
+        // The selected item now remains physically available even after its
+        // menu closes. A Barkeep click or Escape explicitly ends the session.
+        await waitForInteractionSessionToEnd()
+        await restoreAfterActivation(previousState: previousState)
+    }
+
+    private func beginInteractionSession(itemID: String) {
+        stopInteractionMonitoring()
+        interactionDidEnd = false
+        activationPhase = .menuOpen(itemID)
+        interactionEscapeMonitor = NSEvent.addGlobalMonitorForEvents(
+            matching: .keyDown
+        ) { [weak self] event in
+            Task { @MainActor in
+                if event.type == .keyDown && event.keyCode == 53 {
+                    self?.finishInteractionSession()
+                }
             }
-        } else {
-            message = BarkeepError.itemNotFound.localizedDescription
         }
+    }
+
+    private func waitForInteractionSessionToEnd() async {
+        if interactionDidEnd { return }
+        await withCheckedContinuation { continuation in
+            if interactionDidEnd {
+                continuation.resume()
+            } else {
+                interactionEndContinuation = continuation
+            }
+        }
+    }
+
+    private func finishInteractionSession() {
+        guard !interactionDidEnd else { return }
+        interactionDidEnd = true
+        interactionEndContinuation?.resume()
+        interactionEndContinuation = nil
+    }
+
+    private func stopInteractionMonitoring() {
+        if let interactionEscapeMonitor {
+            NSEvent.removeMonitor(interactionEscapeMonitor)
+            self.interactionEscapeMonitor = nil
+        }
+    }
+
+    private func restoreAfterActivation(previousState: StatusBarEngine.State) async {
+        activationPhase = .restoring
+        stopInteractionMonitoring()
+        if menuBarMode == .overflowShelf {
+            statusBar.setState(.revealed)
+        } else {
+            statusBar.setState(previousState)
+        }
+        try? await Task.sleep(for: .milliseconds(350))
+        let rescanned = await scanner.scan(apps: runningApps())
+        applyScanResult(rescanned)
+        activationPhase = .resting
+    }
+
+    private func applyScanResult(_ result: [MenuBarItemSnapshot]) {
+        store.reconcileItemIdentities(with: result)
+        let scannedOverflow = OverflowClassifier.overflowedIDs(
+            items: result,
+            screens: screenGeometries()
+        )
+        let runningPIDs = Set(runningApps().map(\.pid))
+        shelfInventory.update(
+            scannedItems: result,
+            scannedOverflowIDs: scannedOverflow,
+            runningPIDs: runningPIDs
+        )
+        overflowIDs = scannedOverflow
+        items = result
     }
 
     private func closePickers() {
@@ -857,7 +965,8 @@ final class AppCoordinator: NSObject, ObservableObject {
     }
 
     func hide() {
-        guard movingItemID == nil else { return }
+        guard movingItemID == nil,
+              activationPhase == .resting || activationPhase == .shelfOpen else { return }
         rehideTask?.cancel()
         rehideTask = nil
         if menuBarMode == .overflowShelf {
@@ -903,6 +1012,10 @@ final class AppCoordinator: NSObject, ObservableObject {
 
     private func handlePrimaryClick(_ event: NSEvent) {
         guard movingItemID == nil else { return }
+        if activationPhase != .resting && activationPhase != .shelfOpen {
+            finishInteractionSession()
+            return
+        }
         if menuBarMode == .overflowShelf {
             if event.modifierFlags.contains(.option) {
                 showSearch()
@@ -1158,5 +1271,5 @@ final class AppCoordinator: NSObject, ObservableObject {
         searchPanel?.close()
         updater.checkForUpdates()
     }
-    @objc private func menuQuit() { NSApp.terminate(nil) }
+    @objc private func menuQuit() { quitApp() }
 }

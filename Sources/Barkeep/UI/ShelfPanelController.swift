@@ -146,13 +146,6 @@ struct ShelfView: View {
     @ObservedObject var coordinator: AppCoordinator
     @State private var hoveredName: String?
 
-    /// Overflowed items in menu bar order, left to right.
-    private var overflowed: [MenuBarItemSnapshot] {
-        coordinator.items
-            .filter { coordinator.isOverflowed($0) && !$0.isPinnedByMacOS }
-            .sorted { $0.frame.midX < $1.frame.midX }
-    }
-
     var body: some View {
         iconRow
             // Reserved caption strip: the hovered item's name appears
@@ -178,8 +171,8 @@ struct ShelfView: View {
                     .font(.callout)
                     .foregroundStyle(.secondary)
                 Button("Set Up") { AccessibilityPermission.request() }
-            } else if overflowed.isEmpty {
-                if coordinator.isScanning {
+            } else if coordinator.shelfSessionItems.isEmpty {
+                if coordinator.isPreparingShelf {
                     ProgressView().controlSize(.small)
                     Text("Scanning…")
                         .font(.callout)
@@ -190,7 +183,7 @@ struct ShelfView: View {
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ForEach(overflowed) { item in
+                ForEach(coordinator.shelfSessionItems) { item in
                     ShelfIconButton(item: item, coordinator: coordinator) { name in
                         hoveredName = name
                     }

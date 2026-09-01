@@ -16,15 +16,20 @@ section menu. Drag and drop is a fast option, but it is not the only way to arra
 
 ## Main controls stay predictable
 
-- A click on the Barkeep icon opens the item picker.
-- An Option-click toggles all hidden items.
+- In overflow-shelf mode, a click opens a stable shelf snapshot.
+- In overflow-shelf mode, an Option-click opens the searchable item picker.
 - A right-click opens a short command menu.
 - `Command-Backslash` toggles the Hidden section.
 - `Command-Shift-Space` opens the item picker.
 
-The picker lists Hidden & Overflow items before Visible items, supports filtering, opens a selected
-item's real menu, and links directly to arrangement. The right-click menu contains management and
+The shelf includes both deliberately hidden items and items currently displaced by physical
+overflow. Its contents do not reshuffle until it is closed and reopened. Selecting an item reveals
+its real status control and opens its native menu or popover at that control. The revealed item
+stays physically available after the menu closes; Escape or a normal click on Barkeep explicitly
+restores the hidden layout. There is no automatic timeout. The picker supports filtering and links directly to arrangement. The
+right-click menu contains management and
 physical-reveal actions. Less common settings stay in the settings window.
+The App section in Settings includes an explicit Quit Barkeep HS action.
 
 ## Item moves require a direct user action
 
@@ -91,6 +96,10 @@ with light and dark menu bars.
 
 Barkeep has no account, telemetry, or cloud sync. It stores settings, item rules, and profiles in
 one versioned JSON document under Application Support. Export uses the same document format.
+
+Persistent item identity must not depend on mutable status text. Barkeep uses an Accessibility
+identifier when the owner provides one and otherwise reconciles a stable per-owner slot. Older
+label-based rules migrate only after a live scan provides matching evidence.
 
 Touch ID uses `LocalAuthentication`. Launch at Login uses `SMAppService`. The personal fork does not
 load an upstream binary update feed; upstream changes are reviewed as source before merging.

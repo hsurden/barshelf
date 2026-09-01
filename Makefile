@@ -14,6 +14,6 @@ dmg:
 	./scripts/build-dmg.sh
 
 install:
-	./scripts/install-local.sh
+	./scripts/install-local-hs.sh
 
 run: install

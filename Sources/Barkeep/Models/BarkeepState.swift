@@ -147,6 +147,11 @@ struct BarkeepDocument: Codable, Sendable {
     var profiles: [BarkeepProfile] = []
     // Optional so documents saved before this field existed keep decoding.
     var priorityOrder: [PriorityEntry]?
+    // The current identity scheme uses machine-shaped Accessibility identifiers
+    // or per-owner slots instead of
+    // mutable status text as an item's persistent identity. Migration needs a
+    // live scan, so this is separate from the document format version.
+    var identityVersion: Int?
 }
 
 struct MenuBarItemSnapshot: Identifiable, Hashable, Sendable {
@@ -156,6 +161,69 @@ struct MenuBarItemSnapshot: Identifiable, Hashable, Sendable {
     let bundleIdentifier: String?
     let frame: CGRect
     let isEnabled: Bool
+    let ownerPID: pid_t
+    let sourceIdentifier: String?
+    let ownerSlot: Int
+
+    init(
+        id: String,
+        displayName: String,
+        ownerName: String,
+        bundleIdentifier: String?,
+        frame: CGRect,
+        isEnabled: Bool,
+        ownerPID: pid_t = 0,
+        sourceIdentifier: String? = nil,
+        ownerSlot: Int = 0
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.ownerName = ownerName
+        self.bundleIdentifier = bundleIdentifier
+        self.frame = frame
+        self.isEnabled = isEnabled
+        self.ownerPID = ownerPID
+        self.sourceIdentifier = sourceIdentifier
+        self.ownerSlot = ownerSlot
+    }
+}
+
+enum MenuBarItemIdentity {
+    static let currentVersion = 3
+
+    static func stableAccessibilityIdentifier(
+        bundleIdentifier: String?,
+        identifier: String?
+    ) -> String? {
+        guard let value = identifier?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else { return nil }
+        if bundleIdentifier == "com.apple.controlcenter", value.hasPrefix("com.apple.") {
+            return value
+        }
+        let machineCharacters = CharacterSet.alphanumerics.union(
+            CharacterSet(charactersIn: "._:-")
+        )
+        guard value.rangeOfCharacter(from: machineCharacters.inverted) == nil,
+              value.contains(where: { "._-:".contains($0) }) else {
+            return nil
+        }
+        return value
+    }
+
+    /// Accessibility identifiers are stable across launches. Apps that do not
+    /// expose one are usually single-item owners; for them, persist the item's
+    /// slot within that owner's extras menu bar. Mutable titles are display
+    /// state and must never be part of the identifier.
+    static func id(bundleIdentifier: String?, pid: pid_t, identifier: String?, slot: Int) -> String {
+        let owner = bundleIdentifier ?? "pid:\(pid)"
+        if let identifier = stableAccessibilityIdentifier(
+            bundleIdentifier: bundleIdentifier,
+            identifier: identifier
+        ) {
+            return "\(owner)|ax:\(identifier)"
+        }
+        return "\(owner)|slot:\(slot)"
+    }
 }
 
 struct MenuBarPickerContents {
@@ -190,10 +258,11 @@ extension MenuBarItemSnapshot {
     /// macOS pins the Clock and Control Center on the far right of the menu bar
     /// and rejects every Command-drag on them, so Barkeep never offers to move them.
     var isPinnedByMacOS: Bool {
-        bundleIdentifier == "com.apple.controlcenter" && (
-            id.hasSuffix("|com.apple.menuextra.clock") ||
-            id.hasSuffix("|com.apple.menuextra.controlcenter")
-        )
+        guard bundleIdentifier == "com.apple.controlcenter" else { return false }
+        let identifier = sourceIdentifier ?? id.split(separator: "|", maxSplits: 1)
+            .dropFirst().first.map(String.init)?.replacingOccurrences(of: "ax:", with: "")
+        return identifier == "com.apple.menuextra.clock" ||
+            identifier == "com.apple.menuextra.controlcenter"
     }
 }
 

@@ -14,8 +14,8 @@ bug report when one item is missing but other items appear.
 ## macOS keeps asking for Accessibility access
 
 Use the same installed app path and the same signing identity for each local build. `make install`
-uses `~/Applications/Barkeep.app` and prefers a Developer ID certificate. An ad hoc build can look
-like a different app after each rebuild.
+uses `~/Applications/Barkeep HS.app` and the local `Barkeep HS Signing` identity when available.
+An ad hoc build can look like a different app after each rebuild.
 
 Remove old Barkeep entries from the Accessibility list before you add the stable signed app again.
 Do not move the app after macOS grants access.
@@ -45,6 +45,12 @@ Use these checks in order.
 
 Barkeep keeps the old saved section after a failed move.
 
+## A shelf icon disappears while the shelf is open
+
+Shelf membership is fixed for each opening. Close and reopen the shelf to take a new overflow
+snapshot. If an item is missing immediately after opening, use the full picker and report the app
+name; some apps do not expose a stable Accessibility item.
+
 ## Hidden items appear again too soon
 
 Barkeep does not hide items while the pointer stays in the menu bar area or while a menu is open.
@@ -53,6 +59,10 @@ The hide delay starts to apply after you move the pointer away.
 Open **Behavior** settings. Increase **Hide delay** or turn off **Hide items again**. Also check
 the click, scroll, hover, app-change, and external-display settings. More than one enabled trigger
 can change the current reveal state.
+
+Overflow-shelf activation uses a separate rule: the selected real item stays revealed while its
+native menu or popover is open and remains physically available after that interface closes. There
+is no timeout. Press Escape or click Barkeep to restore the hidden layout.
 
 ## A keyboard shortcut does nothing
 

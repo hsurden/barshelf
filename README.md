@@ -34,18 +34,21 @@ The default Barkeep icon is a compact ellipsis. You can choose from eight monoch
 
 ## Use Barkeep without leaving your current app
 
-- Click the Barkeep icon to open a picker containing Hidden & Overflow items plus Visible items.
-- Option-click the icon to show all sections.
+- Click the Barkeep icon to open a stable shelf of overflowed and Always hidden items.
+- Type while the shelf is open, or Option-click the icon, to open the searchable full picker.
 - Right-click the icon for arrangement, physical reveal controls, and other management actions.
 - Press `Command-Backslash` to show or hide items.
 - Press `Command-Shift-Space` to open the item picker.
 
-Choose an entry in the picker to open that item's real menu. Use its arrangement button to decide
+Choose an entry to reveal its real status item and open that item's native menu. Barkeep restores
+the resting layout only when you press Escape or click Barkeep again; revealed overflow items have
+no automatic timeout. Use the arrangement button to decide
 which important icons should remain physically visible. The picker remains usable when the menu bar
 does not have enough width to display every managed item at once.
 
 Barkeep can hide items again after a delay. It can also reveal them when you click, scroll, or
 hover in the menu bar. Each optional trigger stops when you turn it off.
+The App section in Settings includes a Quit Barkeep HS button.
 
 ## Your menu bar data stays on your Mac
 
@@ -80,15 +83,13 @@ This personal fork also has a Command-Line-Tools fallback for HS's current Mac, 
 not installed:
 
 ```sh
-make local-build   # Build dist/Barkeep HS.app without replacing the upstream app
+make local-build   # Build dist/Barkeep HS.app without replacing the installed app
+make install       # Install the signed build as ~/Applications/Barkeep HS.app
 ```
 
-The fallback uses an ad-hoc signature, so macOS may ask for Accessibility permission again after a
-rebuild. A stable Apple signing identity remains preferable for long-term use.
-
-`make install` builds the app, installs it in `~/Applications`, and opens it. A Developer ID
-certificate gives local builds a stable identity. Without one, macOS can ask for Accessibility
-access again after a rebuild.
+The fallback uses the local `Barkeep HS Signing` identity when it is available. `make install`
+moves the previous installed copy to Trash, installs the newly signed build at the one canonical
+path, and opens it. Without that identity, macOS can ask for Accessibility access again.
 
 ## Verify a downloaded build
 

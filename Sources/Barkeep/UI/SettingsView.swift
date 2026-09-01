@@ -344,6 +344,15 @@ private struct BehaviorSettingsView: View {
             Section("App") {
                 SettingsToggle("Start Barkeep at login", isOn: setting(\.launchAtLogin))
                 SettingsToggle("Show Barkeep in the Dock", isOn: setting(\.showDockIcon))
+                HStack {
+                    Text("Stop Barkeep and remove its menu bar controls until it is opened again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 16)
+                    Button("Quit Barkeep HS", role: .destructive) {
+                        coordinator.quitApp()
+                    }
+                }
             }
             Section("Keyboard shortcuts") {
                 LabeledContent(

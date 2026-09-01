@@ -84,6 +84,16 @@ of truth for whether the item landed.
 The scanner does not poll. Settings and search ask for a scan when they need current items. The
 scanner uses one serial queue because Accessibility calls can block.
 
+Opening the shelf creates one immutable membership snapshot from the union of saved Always hidden
+intent and current physical overflow. Later geometry changes do not remove buttons during that
+shelf session. Item labels remain live display data; persistence uses an Accessibility identifier
+or a per-owner slot and migrates older label-based keys after a matching scan.
+
+Shelf activation follows one serialized lifecycle: resting, shelf open, revealing the selected
+item, manual interaction, and restoring. The selected item remains physically available without a
+timer, including after its native menu or popover closes. A global Escape monitor or another normal
+click on Barkeep explicitly ends the session and restores the hidden layout.
+
 `TriggerCenter` creates only the event sources required by enabled settings.
 
 - Hover uses a 10 Hz timer while hover reveal is on.

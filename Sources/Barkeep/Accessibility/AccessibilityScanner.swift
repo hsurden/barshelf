@@ -100,8 +100,16 @@ final class AccessibilityScanner: @unchecked Sendable {
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
             .first { !$0.isEmpty } ?? "Menu bar item"
 
-        let stablePart = identifier?.isEmpty == false ? identifier! : "\(cleanTitle)|\(ordinal)"
-        let id = "\(app.bundleIdentifier ?? "pid:\(app.pid)")|\(stablePart)"
+        let stableIdentifier = MenuBarItemIdentity.stableAccessibilityIdentifier(
+            bundleIdentifier: app.bundleIdentifier,
+            identifier: identifier
+        )
+        let id = MenuBarItemIdentity.id(
+            bundleIdentifier: app.bundleIdentifier,
+            pid: app.pid,
+            identifier: stableIdentifier,
+            slot: ordinal
+        )
         let enabled: Bool = copyAttribute(element, kAXEnabledAttribute as CFString) ?? true
 
         return MenuBarItemSnapshot(
@@ -110,7 +118,10 @@ final class AccessibilityScanner: @unchecked Sendable {
             ownerName: app.name,
             bundleIdentifier: app.bundleIdentifier,
             frame: frame,
-            isEnabled: enabled
+            isEnabled: enabled,
+            ownerPID: app.pid,
+            sourceIdentifier: stableIdentifier,
+            ownerSlot: ordinal
         )
     }
 

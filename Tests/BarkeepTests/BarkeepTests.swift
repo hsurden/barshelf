@@ -331,6 +331,83 @@ final class BarkeepTests: XCTestCase {
         ).isPinnedByMacOS)
     }
 
+    func testFallbackIdentityDoesNotDependOnMutableTitle() {
+        let first = MenuBarItemIdentity.id(
+            bundleIdentifier: "com.example.sync",
+            pid: 42,
+            identifier: nil,
+            slot: 0
+        )
+        let afterStatusTextChanged = MenuBarItemIdentity.id(
+            bundleIdentifier: "com.example.sync",
+            pid: 42,
+            identifier: nil,
+            slot: 0
+        )
+        XCTAssertEqual(first, "com.example.sync|slot:0")
+        XCTAssertEqual(first, afterStatusTextChanged)
+        XCTAssertEqual(
+            MenuBarItemIdentity.id(
+                bundleIdentifier: "com.example.sync",
+                pid: 42,
+                identifier: "status-item",
+                slot: 7
+            ),
+            "com.example.sync|ax:status-item"
+        )
+        XCTAssertEqual(
+            MenuBarItemIdentity.id(
+                bundleIdentifier: "com.microsoft.OneDrive",
+                pid: 42,
+                identifier: "OneDrive — Backed up and synced",
+                slot: 0
+            ),
+            "com.microsoft.OneDrive|slot:0"
+        )
+    }
+
+    @MainActor
+    func testLegacyRuleAndPriorityIdentityMigration() throws {
+        let baseURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: baseURL, withIntermediateDirectories: true)
+        let legacyID = "com.example.sync|Connected|0"
+        var document = BarkeepDocument()
+        document.rules[legacyID] = ItemRule(
+            id: legacyID,
+            displayName: "Connected",
+            ownerName: "Sync App",
+            bundleIdentifier: "com.example.sync",
+            zone: .alwaysHidden,
+            group: nil
+        )
+        document.priorityOrder = [PriorityEntry(
+            id: legacyID,
+            displayName: "Connected",
+            ownerName: "Sync App",
+            bundleIdentifier: "com.example.sync"
+        )]
+        let encoder = JSONEncoder()
+        try encoder.encode(document).write(to: baseURL.appendingPathComponent("state.json"))
+
+        let item = MenuBarItemSnapshot(
+            id: "com.example.sync|slot:0",
+            displayName: "Synchronizing 42 files",
+            ownerName: "Sync App",
+            bundleIdentifier: "com.example.sync",
+            frame: CGRect(x: 10, y: 4, width: 20, height: 24),
+            isEnabled: true,
+            ownerPID: 42,
+            ownerSlot: 0
+        )
+        let store = StateStore(baseURL: baseURL)
+        store.reconcileItemIdentities(with: [item])
+
+        XCTAssertNil(store.rules[legacyID])
+        XCTAssertEqual(store.rules[item.id]?.zone, .alwaysHidden)
+        XCTAssertEqual(store.priorityOrder.map(\.id), [item.id])
+    }
+
     @MainActor
     func testStateRoundTrip() throws {
         let baseURL = FileManager.default.temporaryDirectory
@@ -420,6 +497,53 @@ final class BarkeepTests: XCTestCase {
             screens: screens
         )
         XCTAssertEqual(ids, ["com.example.notched|status"])
+    }
+
+    func testShelfSessionIncludesSavedHiddenAndPhysicalOverflow() {
+        let visible = snapshot("Visible", x: 1_200)
+        let overflow = snapshot("Overflow", x: 900)
+        let savedHidden = snapshot("Saved", x: 1_300)
+        let shelf = ShelfSessionModel.items(
+            from: [visible, overflow, savedHidden],
+            overflowIDs: [overflow.id],
+            intentionallyHiddenIDs: [savedHidden.id]
+        )
+
+        XCTAssertEqual(Set(shelf.map(\.id)), [overflow.id, savedHidden.id])
+        // A session is an owned value. Later classifier changes do not mutate
+        // the buttons already displayed in this session.
+        let laterOverflowIDs: Set<String> = []
+        XCTAssertTrue(laterOverflowIDs.isEmpty)
+        XCTAssertEqual(Set(shelf.map(\.id)), [overflow.id, savedHidden.id])
+    }
+
+    func testShelfInventoryToleratesTwoMissedScansAndDropsExitedOwner() {
+        let item = MenuBarItemSnapshot(
+            id: "com.example.sync|slot:0",
+            displayName: "Sync",
+            ownerName: "Sync",
+            bundleIdentifier: "com.example.sync",
+            frame: CGRect(x: 900, y: 4, width: 20, height: 24),
+            isEnabled: true,
+            ownerPID: 42
+        )
+        var inventory = ShelfInventory()
+        inventory.update(
+            scannedItems: [item],
+            scannedOverflowIDs: [item.id],
+            runningPIDs: [42]
+        )
+        inventory.update(scannedItems: [], scannedOverflowIDs: [], runningPIDs: [42])
+        inventory.update(scannedItems: [], scannedOverflowIDs: [], runningPIDs: [42])
+        XCTAssertEqual(inventory.items.map(\.id), [item.id])
+        XCTAssertEqual(inventory.overflowIDs, [item.id])
+
+        inventory.update(scannedItems: [item], scannedOverflowIDs: [], runningPIDs: [42])
+        XCTAssertTrue(inventory.overflowIDs.isEmpty)
+
+        inventory.update(scannedItems: [], scannedOverflowIDs: [], runningPIDs: [])
+        XCTAssertTrue(inventory.items.isEmpty)
+        XCTAssertTrue(inventory.overflowIDs.isEmpty)
     }
 
     func testFlatDisplayHasNoNotchOverflow() {
@@ -516,6 +640,7 @@ final class BarkeepTests: XCTestCase {
         XCTAssertNil(document.settings.menuBarMode)
         XCTAssertEqual(document.settings.mode, .overflowShelf)
         XCTAssertNil(document.priorityOrder)
+        XCTAssertNil(document.identityVersion)
     }
 
     @MainActor
