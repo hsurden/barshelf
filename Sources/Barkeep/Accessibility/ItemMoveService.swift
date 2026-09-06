@@ -25,6 +25,19 @@ struct ScreenGeometry: Sendable {
 final class ItemMoveService: @unchecked Sendable {
     private let queue = DispatchQueue(label: "is.ian.barkeep.item-move", qos: .userInitiated)
 
+    func moveDirectly(source: MenuBarWindow, destination: MenuBarWindow, recipientPID: pid_t,
+                      edge: WindowMoveEdge, screens: [ScreenGeometry]) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            queue.async {
+                do {
+                    try WindowDirectedMove.perform(source: source, destination: destination,
+                                                   recipientPID: recipientPID, edge: edge, screens: screens)
+                    continuation.resume()
+                } catch { continuation.resume(throwing: error) }
+            }
+        }
+    }
+
     func move(
         from sourceFrame: CGRect,
         to target: CGPoint,

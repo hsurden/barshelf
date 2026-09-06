@@ -10,7 +10,8 @@ binary update cannot overwrite custom behavior.
 - Click opens the overflow-first item picker. Option-click reveals all items in the physical bar.
   Right-click opens the management menu.
 - `Command-Backslash` toggles items in the physical bar. `Command-Shift-Space` opens the picker.
-- Only a direct item-section action can post a Command-drag.
+- Only a direct item-section/reorder action or selected-item temporary access can post a
+  Command-drag. An explicit end of temporary access (dots, Escape, Quit) can return that item.
 - A move must use fresh Accessibility data and must pass a second scan before state is saved.
 - Launch, wake, display events, app events, timers, and updates must never move an item.
 - Touch ID or Mac password protection applies to all reveal paths, including search and triggers.
@@ -73,7 +74,7 @@ and auto-hide behavior consistent.
 
 Treat item frames as temporary evidence. Never save geometry or `AXUIElement` objects to disk.
 
-Keep the item move sequence in this order.
+For Settings section/order moves, keep the item move sequence in this order.
 
 1. Open all sections.
 2. Scan the live menu bar.
@@ -288,3 +289,15 @@ build.
 no-Sparkle source into `dist/Barkeep HS.app` with bundle identifier `com.hsurden.barkeep` and an
 ad-hoc signature. It deliberately does not overwrite `/Applications/Barkeep.app`. Expect macOS to
 forget Accessibility permission after some rebuilds until a stable signing identity is available.
+
+### Single-item overflow access (2026-09-06)
+
+HS approved bringing only the selected overflow icon to the left edge of the currently visible
+icons (for example, left of Wi-Fi), leaving it for HS to click, and returning it when the dots
+are clicked again. Overflow selection must not send AXPress or open the native menu automatically. Keep the original neighbor identities only in memory, confirm both moves, and
+leave saved rules unchanged. The user rejected the visible grab/drag and full-group reveal.
+Temporary access uses fresh AX-to-WindowServer matching, the original app PID even when Control
+Center hosts the window, and scoped directed events. Keep the hidden section closed. Confirm the
+whole selected icon clears the notch and precedes the leftmost visible neighbor before the temporary session starts.
+No timers or background events may initiate a return move. Direct routing relies on undocumented
+window fields; only signed, live round trips validate compatibility. See docs/SINGLE-ITEM-ACCESS.md.

@@ -17,23 +17,32 @@ section menu. Drag and drop is a fast option, but it is not the only way to arra
 ## Main controls stay predictable
 
 - In overflow-shelf mode, a click opens a stable shelf snapshot.
+- The overflow gear opens a menu below it: **Settings**, then **Quit Barkeep HS**.
 - In overflow-shelf mode, an Option-click opens the searchable item picker.
 - A right-click opens a short command menu.
 - `Command-Backslash` toggles the Hidden section.
 - `Command-Shift-Space` opens the item picker.
 
 The shelf includes both deliberately hidden items and items currently displaced by physical
-overflow. Its contents do not reshuffle until it is closed and reopened. Selecting an item reveals
-its real status control and opens its native menu or popover at that control. The revealed item
-stays physically available after the menu closes; Escape or a normal click on Barkeep explicitly
-restores the hidden layout. There is no automatic timeout. The picker supports filtering and links directly to arrangement. The
-right-click menu contains management and
-physical-reveal actions. Less common settings stay in the settings window.
-The App section in Settings includes an explicit Quit Barkeep HS action.
+overflow. Its contents do not reshuffle until it is closed and reopened. Selecting an overflow item
+requests one temporary move of its real status control to the left edge of the visible icons, before
+the leftmost currently drawable icon. The hidden group stays closed throughout the move. Selecting
+an overflow entry exposes the icon only; it does not send AXPress or open its menu. The user clicks
+the real icon when ready. The icon must be confirmed at that left edge and fully outside the notch
+before the temporary session begins. It remains available after its menu closes; Escape or a normal
+Barkeep click requests a verified return to its original neighbors. There is no automatic timeout.
+Temporary moves never change saved rules or priority order. Window-addressed input avoids a visible
+pointer drag and also handles the return. If a return fails, Barkeep retains its return address in
+memory and offers another explicit click to retry. The picker supports filtering and links directly
+to arrangement. The right-click menu contains management and physical-reveal actions. Less common
+settings stay in the settings window. The App section in Settings includes an explicit Quit Barkeep
+HS action.
 
 ## Item moves require a direct user action
 
-Barkeep can post a Command-drag only after the user chooses a new section for one item. The app
+Barkeep can post a Command-drag after the user chooses a new section for one item, explicitly
+reorders it, or selects an overflow item for temporary access. Closing that temporary session
+authorizes the return move; quitting Barkeep first attempts this return. The app
 must make a fresh Accessibility scan before the move and another scan after it. It saves the new
 rule only when the second scan confirms the result.
 

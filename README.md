@@ -35,16 +35,20 @@ The default Barkeep icon is a compact ellipsis. You can choose from eight monoch
 ## Use Barkeep without leaving your current app
 
 - Click the Barkeep icon to open a stable shelf of overflowed and Always hidden items.
+- Click the shelf’s gear for **Settings**, followed by **Quit Barkeep HS**.
 - Type while the shelf is open, or Option-click the icon, to open the searchable full picker.
 - Right-click the icon for arrangement, physical reveal controls, and other management actions.
 - Press `Command-Backslash` to show or hide items.
 - Press `Command-Shift-Space` to open the item picker.
 
-Choose an entry to reveal its real status item and open that item's native menu. Barkeep restores
-the resting layout only when you press Escape or click Barkeep again; revealed overflow items have
-no automatic timeout. Use the arrangement button to decide
-which important icons should remain physically visible. The picker remains usable when the menu bar
-does not have enough width to display every managed item at once.
+Choose an overflow entry to temporarily put that app's real icon at the left edge of the visible
+menu-bar icons (for example, just left of Wi-Fi). Click the exposed icon yourself to open its menu;
+selecting it in overflow does not click it automatically. Only the selected hidden item comes out,
+and the hidden group stays closed without a visible pointer drag. Click the three dots again or
+press Escape to return it to its original neighbors. Closing the app's menu alone leaves the icon
+available. Saved sections and priority order do not change.
+If there is no room outside the notch or macOS refuses the move, Barkeep reports the failure and
+attempts a verified return. This uses undocumented window routing and can vary across macOS releases.
 
 Barkeep can hide items again after a delay. It can also reveal them when you click, scroll, or
 hover in the menu bar. Each optional trigger stops when you turn it off.
@@ -60,7 +64,7 @@ settings, item rules, and profiles in one local JSON file.
 ```
 
 Accessibility access lets Barkeep list, open, and move menu bar items. Barkeep makes a fresh
-scan before a move and posts a Command-drag only after you choose a new section. Launch, wake,
+scan before a move and moves items only after an explicit arrangement or temporary-access action. Launch, wake,
 display changes, and timers cannot move an item.
 
 Touch ID or the Mac password can protect every reveal path. Launch at Login is optional and uses

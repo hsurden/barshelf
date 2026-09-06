@@ -194,20 +194,66 @@ struct ShelfView: View {
                 .frame(height: 20)
                 .padding(.horizontal, 3)
 
-            Button {
-                coordinator.showSettingsFromShelf()
-            } label: {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 12, weight: .medium))
-                    .frame(width: 22, height: 26)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .onHover { hoveredName = $0 ? "Barkeep settings" : nil }
-            .help("Open Barkeep settings (type to search items instead)")
+            ShelfGearMenu(coordinator: coordinator)
+                .frame(width: 22, height: 26)
+                .onHover { hoveredName = $0 ? "Settings and Quit" : nil }
+                .help("Open Settings and Quit menu")
         }
         .padding(.horizontal, 10)
         .padding(.top, 7)
+    }
+}
+
+/// A native menu anchored below the gear, with no default Settings action.
+private struct ShelfGearMenu: NSViewRepresentable {
+    let coordinator: AppCoordinator
+
+    func makeCoordinator() -> MenuActions {
+        MenuActions(coordinator: coordinator)
+    }
+
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton()
+        button.isBordered = false
+        button.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "Settings and Quit")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 12, weight: .medium))
+        button.imagePosition = .imageOnly
+        button.setAccessibilityLabel("Settings and Quit")
+        button.target = context.coordinator
+        button.action = #selector(MenuActions.showMenu(_:))
+        return button
+    }
+
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.coordinator = coordinator
+    }
+
+    @MainActor
+    final class MenuActions: NSObject {
+        weak var coordinator: AppCoordinator?
+
+        init(coordinator: AppCoordinator) {
+            self.coordinator = coordinator
+        }
+
+        @objc func showMenu(_ button: NSButton) {
+            let menu = NSMenu()
+            menu.autoenablesItems = false
+            let settings = menu.addItem(withTitle: "Settings", action: #selector(openSettings), keyEquivalent: "")
+            settings.target = self
+            let quit = menu.addItem(withTitle: "Quit Barkeep HS", action: #selector(quitBarkeep), keyEquivalent: "")
+            quit.target = self
+            let bottom = button.isFlipped ? button.bounds.maxY + 4 : button.bounds.minY - 4
+            menu.popUp(positioning: nil, at: NSPoint(x: button.bounds.minX, y: bottom), in: button)
+        }
+
+        @objc private func openSettings() {
+            coordinator?.showSettingsFromShelf()
+        }
+
+        @objc private func quitBarkeep() {
+            coordinator?.quitApp()
+        }
     }
 }
 

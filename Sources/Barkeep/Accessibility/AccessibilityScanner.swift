@@ -1,6 +1,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import os
 
 struct RunningAppDescriptor: Sendable {
     let pid: pid_t
@@ -8,8 +9,26 @@ struct RunningAppDescriptor: Sendable {
     let bundleIdentifier: String?
 }
 
+private let scanLog = Logger(subsystem: "is.ian.barkeep", category: "scan")
+
 final class AccessibilityScanner: @unchecked Sendable {
+    /// One busy application must not stall the whole scan. Accessibility's
+    /// default messaging timeout is measured in seconds, so a hung app can
+    /// hold the scan far past any interactive budget. Every probe below runs
+    /// against a per-application element carrying this timeout instead.
+    private static let messagingTimeout: Float = 0.25
+
+    /// Probes are blocked on IPC rather than on the CPU, so the useful width
+    /// is higher than the core count, but still bounded so a large session
+    /// cannot explode the thread pool.
+    private static let maxConcurrentProbes = 16
+
     private let queue = DispatchQueue(label: "is.ian.barkeep.accessibility", qos: .userInitiated)
+    private let probeQueue = DispatchQueue(
+        label: "is.ian.barkeep.accessibility.probe",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
     private var elementsByID: [String: AXUIElement] = [:]
 
     func scan(apps: [RunningAppDescriptor]) async -> [MenuBarItemSnapshot] {
@@ -20,44 +39,31 @@ final class AccessibilityScanner: @unchecked Sendable {
         }
     }
 
-    func press(itemID: String) async -> Bool {
+    func press(itemID: String) async -> MenuBarPressResult {
         await withCheckedContinuation { continuation in
             queue.async { [self] in
                 guard let element = elementsByID[itemID] else {
-                    continuation.resume(returning: false)
+                    continuation.resume(returning: .unavailable)
                     return
                 }
-                continuation.resume(
-                    returning: AXUIElementPerformAction(element, kAXPressAction as CFString) == .success
-                )
+                let error = AXUIElementPerformAction(element, kAXPressAction as CFString)
+                scanLog.notice("AXPress response=\(error.rawValue, privacy: .public)")
+                continuation.resume(returning: MenuBarPressResult(error: error))
             }
         }
     }
 
     private func scanNow(apps: [RunningAppDescriptor]) -> [MenuBarItemSnapshot] {
+        let started = DispatchTime.now()
+        let probed = probeAll(apps: apps)
+
         var snapshots: [MenuBarItemSnapshot] = []
         var newElements: [String: AXUIElement] = [:]
 
-        for app in apps {
-            let application = AXUIElementCreateApplication(app.pid)
-            // AXMenuBar is the app's File/Edit/View menu. AXExtrasMenuBar contains
-            // the status items that appear on the right side of the macOS menu bar.
-            guard let menuBar: AXUIElement = copyAttribute(
-                application,
-                kAXExtrasMenuBarAttribute as CFString
-            ) else {
-                continue
-            }
-
-            let children: [AXUIElement] = copyArrayAttribute(
-                menuBar,
-                kAXChildrenAttribute as CFString,
-                limit: 256
-            )
-            for (index, element) in children.enumerated() {
-                guard let snapshot = makeSnapshot(element: element, app: app, ordinal: index) else {
-                    continue
-                }
+        // Merge in the caller's application order so a concurrent probe still
+        // produces the same result as the earlier serial scan.
+        for found in probed {
+            for (snapshot, element) in found {
                 if snapshots.contains(where: { existing in
                     existing.bundleIdentifier == snapshot.bundleIdentifier &&
                     abs(existing.frame.midX - snapshot.frame.midX) < 1 &&
@@ -71,11 +77,68 @@ final class AccessibilityScanner: @unchecked Sendable {
         }
 
         elementsByID = newElements
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - started.uptimeNanoseconds)
+            / 1_000_000
+        scanLog.notice("""
+        scan apps=\(apps.count, privacy: .public) \
+        items=\(snapshots.count, privacy: .public) \
+        ms=\(elapsed, format: .fixed(precision: 1), privacy: .public)
+        """)
         return snapshots.sorted { lhs, rhs in
             if abs(lhs.frame.midY - rhs.frame.midY) > 2 {
                 return lhs.frame.midY > rhs.frame.midY
             }
             return lhs.frame.midX > rhs.frame.midX
+        }
+    }
+
+    /// Asks every application for its status items concurrently. Each probe is
+    /// an independent synchronous round trip into another process, so the scan
+    /// is dominated by waiting rather than by work.
+    private func probeAll(apps: [RunningAppDescriptor]) -> [[(MenuBarItemSnapshot, AXUIElement)]] {
+        guard !apps.isEmpty else { return [] }
+        var results = [[(MenuBarItemSnapshot, AXUIElement)]](repeating: [], count: apps.count)
+        let lock = NSLock()
+        let group = DispatchGroup()
+        let slots = DispatchSemaphore(value: Self.maxConcurrentProbes)
+
+        for (index, app) in apps.enumerated() {
+            slots.wait()
+            probeQueue.async(group: group) { [self] in
+                defer { slots.signal() }
+                let found = probe(app: app)
+                guard !found.isEmpty else { return }
+                lock.lock()
+                results[index] = found
+                lock.unlock()
+            }
+        }
+        group.wait()
+        return results
+    }
+
+    private func probe(app: RunningAppDescriptor) -> [(MenuBarItemSnapshot, AXUIElement)] {
+        let application = AXUIElementCreateApplication(app.pid)
+        AXUIElementSetMessagingTimeout(application, Self.messagingTimeout)
+        // AXMenuBar is the app's File/Edit/View menu. AXExtrasMenuBar contains
+        // the status items that appear on the right side of the macOS menu bar.
+        guard let menuBar: AXUIElement = copyAttribute(
+            application,
+            kAXExtrasMenuBarAttribute as CFString
+        ) else {
+            return []
+        }
+
+        let children: [AXUIElement] = copyArrayAttribute(
+            menuBar,
+            kAXChildrenAttribute as CFString,
+            limit: 256
+        )
+        return children.enumerated().compactMap { index, element in
+            guard let snapshot = makeSnapshot(element: element, app: app, ordinal: index) else {
+                return nil
+            }
+            return (snapshot, element)
         }
     }
 

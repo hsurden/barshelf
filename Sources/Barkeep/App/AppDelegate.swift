@@ -32,6 +32,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "--test-window-move"), arguments.count > index + 1 {
+            let bundleID = arguments[index + 1]
+            Task { [weak self] in await self?.coordinator.testWindowMove(bundleIdentifier: bundleID) }
+        }
         if let flagIndex = arguments.firstIndex(of: "--debug-hide"), arguments.count > flagIndex + 1 {
             let bundleID = arguments[flagIndex + 1]
             Task { [weak self] in
@@ -60,6 +64,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.coordinator.revealHiddenItemsForLaunchTest()
             }
         }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        coordinator.prepareForTermination() ? .terminateNow : .terminateCancel
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

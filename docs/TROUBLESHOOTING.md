@@ -31,9 +31,10 @@ macOS keeps some Apple items, for example Clock and Control Center, on the far r
 Command-drag cannot move these items, so Barkeep does not show them in the Items screen.
 
 On a Mac with a camera notch, the menu bar can become full. macOS then parks the leftmost items
-behind the notch and does not draw them. Barkeep cannot drag an item that macOS does not draw, and
-it shows a clear "menu bar is full" message. Close some menu bar apps or turn on tighter item
-spacing, then try again.
+behind the notch and does not draw them. The Settings move path requires a drawable source and shows
+a clear "menu bar is full" message when one is unavailable. Overflow access instead addresses the
+icon's live window, but still needs enough drawable space for the selected icon. Close some menu bar
+apps or turn on tighter item spacing, then try again.
 
 Use these checks in order.
 
@@ -44,6 +45,11 @@ Use these checks in order.
 5. Move the item by hand with Command-drag when macOS does not complete the move.
 
 Barkeep keeps the old saved section after a failed move.
+
+## Open settings or quit from the overflow shelf
+
+Click the shelf's gear to open its menu. Choose **Settings** or **Quit Barkeep HS** below it.
+Clicking the gear alone leaves settings closed.
 
 ## A shelf icon disappears while the shelf is open
 
@@ -60,9 +66,21 @@ Open **Behavior** settings. Increase **Hide delay** or turn off **Hide items aga
 the click, scroll, hover, app-change, and external-display settings. More than one enabled trigger
 can change the current reveal state.
 
-Overflow-shelf activation uses a separate rule: the selected real item stays revealed while its
-native menu or popover is open and remains physically available after that interface closes. There
-is no timeout. Press Escape or click Barkeep to restore the hidden layout.
+Overflow-shelf activation temporarily brings only the selected icon to the left edge of the visible
+icons, such as just left of Wi-Fi. Click the exposed icon to open its native menu. Overflow
+selection does not open it automatically, and the icon remains available after the menu closes.
+There is no timeout. Press Escape or click Barkeep to return it to its original neighbors. The
+hidden group stays closed; no visible pointer drag is performed. Saved sections and priority order
+remain unchanged.
+
+If the destination has no room, free menu-bar space or attach a roomier display and try again. If
+window matching or delivery fails, refresh the shelf and retry; this routing is macOS-dependent. It
+will not report a successful move at an unverified position. A failed return keeps its return
+address for another explicit click on the three dots. If both original neighboring controls have
+exited, Barkeep returns the icon beside the divider on its original side. Force-quitting Barkeep
+during temporary access can leave the icon out; ordinary Quit attempts to return it first. The
+signed Rectangle round trip was verified on the built-in notched display; other display
+configurations may behave differently.
 
 ## A keyboard shortcut does nothing
 
@@ -112,3 +130,15 @@ Open a [GitHub issue](https://github.com/iannuttall/barkeep/issues). Include the
 - Whether the app came from GitHub or a local build
 
 Do not attach `state.json` until you inspect it. It can contain app names and custom profile names.
+
+## A menu opens after a short delay
+
+Overflow selection only exposes the real icon; click it yourself to open its menu. Barkeep sends no
+automatic click in this path, so it does not wait for or report a menu-opening acknowledgment.
+
+For picker actions that directly activate an already-visible control, Accessibility may time out
+while an app is opening or tracking its native menu. Barkeep treats this as an unconfirmed
+acknowledgment, leaves the selected icon available, and does not show a failure alert or click again
+automatically. A second click could close a menu that just opened. If nothing opens, click the real
+icon yourself; the three dots still return it to overflow. An explicitly unsupported or unavailable
+Accessibility control can still produce a recovery message.
