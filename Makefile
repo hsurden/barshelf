@@ -1,4 +1,4 @@
-.PHONY: build check dmg install local-build run
+.PHONY: build check dmg install local-build local-dmg run
 
 build:
 	./scripts/build-app.sh
@@ -12,6 +12,9 @@ check:
 
 dmg:
 	./scripts/build-dmg.sh
+
+local-dmg: local-build
+	SKIP_BUILD=1 ./scripts/build-dmg.sh
 
 install:
 	./scripts/install-local-hs.sh

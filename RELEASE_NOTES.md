@@ -1,4 +1,13 @@
-Custom fork — unreleased
+BarShelf 0.2.0
+
+- Renamed from Barkeep HS to BarShelf (bundle identifier `com.hsurden.barshelf`)
+- The overflow shelf is the only behavior; the classic hide-and-reveal mode, its Hidden section, and its reveal triggers are gone
+- Every menu bar item is either In the menu bar or Always hidden
+- The Items tab groups icons by where they really are, with arrows between the lists to hide or show the selected item
+- Old settings and rules load unchanged; rules from the removed Hidden section become In the menu bar
+- Release DMGs are signed with a personal certificate and are not notarized, so macOS asks for Open Anyway once
+
+Custom fork — earlier unreleased changes
 
 - Normal click opens an overflow-first menu-bar item picker instead of expanding the crowded bar
 - The picker separates Hidden & Overflow items from Visible items

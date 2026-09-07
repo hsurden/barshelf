@@ -9,8 +9,8 @@
 BarShelf is a native menu bar manager for macOS. It keeps important items visible and puts
 everything else one click away.
 
-[Download for macOS](https://github.com/iannuttall/barkeep/releases/latest) ·
-[Report a problem](https://github.com/iannuttall/barkeep/issues) · MIT licensed
+[Download for macOS](https://github.com/hsurden/barshelf/releases/latest) ·
+[Report a problem](https://github.com/hsurden/barshelf/issues) · MIT licensed
 
 </div>
 
@@ -72,8 +72,13 @@ Login is optional and uses the macOS login item service.
 
 ## Install BarShelf
 
-Download the latest DMG from the [GitHub releases page](https://github.com/iannuttall/barkeep/releases/latest),
-drag BarShelf to Applications, and open it.
+1. Download `BarShelf-<version>.dmg` from the [releases page](https://github.com/hsurden/barshelf/releases/latest).
+2. Open the DMG and drag **BarShelf** into the **Applications** folder shown next to it.
+3. Open BarShelf from Applications. macOS will refuse the first time, because these builds are not
+   notarized by Apple (see below). Open **System Settings > Privacy & Security**, scroll to the
+   message about BarShelf, and click **Open Anyway**. This happens once per download.
+4. When BarShelf asks, turn it on under **System Settings > Privacy & Security > Accessibility**.
+   It needs this to list and move menu bar items. Then click the three dots in the menu bar.
 
 BarShelf supports macOS 14 or later. A local build also needs Xcode 16 or later and XcodeGen.
 
@@ -97,12 +102,12 @@ path, and opens it. Without that identity, macOS can ask for Accessibility acces
 
 ## Verify a downloaded build
 
-Public builds use Developer ID signing and Apple notarization. After a release is available you
-can check the installed app with these commands.
+Release DMGs are built on HS's Mac with `make local-dmg` and signed with a personal certificate,
+not an Apple Developer ID, and they are not notarized. That is why macOS asks for **Open Anyway**
+once. Gatekeeper will report the signature as unverified; this is expected.
 
 ```sh
-codesign --verify --deep --strict --verbose=2 /Applications/Barkeep.app
-spctl --assess --type execute --verbose=4 /Applications/Barkeep.app
+codesign --verify --deep --strict --verbose=2 /Applications/BarShelf.app
 ```
 
 Each release also includes a SHA-256 checksum for its DMG.
@@ -118,7 +123,8 @@ make check       # Generate the Xcode project and run tests
 make build       # Build and sign dist/BarShelf.app
 make local-build # Build dist/BarShelf.app with Command Line Tools
 make install     # Install to ~/Applications and open the app
-make dmg         # Build a drag-install DMG
+make dmg         # Build a drag-install DMG with Xcode and a Developer ID
+make local-dmg   # Build a drag-install DMG with Command Line Tools and the local certificate
 ```
 
 These are the main source areas.
