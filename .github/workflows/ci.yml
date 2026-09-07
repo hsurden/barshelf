@@ -23,7 +23,7 @@ jobs:
         run: xcodegen generate
 
       - name: Run tests
-        run: xcodebuild -quiet -project Barkeep.xcodeproj -scheme Barkeep -configuration Debug -derivedDataPath .xcode-build CODE_SIGNING_ALLOWED=NO test
+        run: xcodebuild -quiet -project BarShelf.xcodeproj -scheme BarShelf -configuration Debug -derivedDataPath .xcode-build CODE_SIGNING_ALLOWED=NO test
 
       - name: Build app bundle
         env:
@@ -32,16 +32,16 @@ jobs:
 
       - name: Verify app and Sparkle
         run: |
-          test -d dist/Barkeep.app/Contents/Frameworks/Sparkle.framework
-          codesign --verify --deep --strict --verbose=1 dist/Barkeep.app
+          test -d dist/BarShelf.app/Contents/Frameworks/Sparkle.framework
+          codesign --verify --deep --strict --verbose=1 dist/BarShelf.app
 
       - name: Verify launch
         run: |
-          dist/Barkeep.app/Contents/MacOS/Barkeep & PID=$!
+          dist/BarShelf.app/Contents/MacOS/BarShelf & PID=$!
           sleep 5
           if kill -0 $PID 2>/dev/null; then
             kill $PID
           else
-            echo "::error::Barkeep exited during launch"
+            echo "::error::BarShelf exited during launch"
             exit 1
           fi

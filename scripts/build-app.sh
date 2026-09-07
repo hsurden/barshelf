@@ -3,8 +3,8 @@
 set -euo pipefail
 
 repo_dir="${0:A:h:h}"
-app_name="Barkeep"
-bundle_id="${BUNDLE_ID:-is.ian.barkeep}"
+app_name="BarShelf"
+bundle_id="${BUNDLE_ID:-com.hsurden.barshelf}"
 requested_build_number="${BUILD_NUMBER:-}"
 source "$repo_dir/version.env"
 version="${VERSION:-$MARKETING_VERSION}"
@@ -17,7 +17,7 @@ derived_dir="$repo_dir/.xcode-build"
 source_app="$derived_dir/Build/Products/$configuration/$app_name.app"
 dist_dir="$repo_dir/dist"
 dist_app="$dist_dir/$app_name.app"
-entitlements="$repo_dir/Sources/Barkeep/Barkeep.entitlements"
+entitlements="$repo_dir/Sources/BarShelf/BarShelf.entitlements"
 
 cd "$repo_dir"
 
@@ -56,8 +56,8 @@ fi
 
 xcodebuild build \
     -quiet \
-    -project Barkeep.xcodeproj \
-    -scheme Barkeep \
+    -project BarShelf.xcodeproj \
+    -scheme BarShelf \
     -configuration "$configuration" \
     -derivedDataPath "$derived_dir" \
     -destination 'generic/platform=macOS' \

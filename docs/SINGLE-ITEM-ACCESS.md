@@ -1,4 +1,4 @@
-# Single-item access in Barkeep HS
+# Single-item access in BarShelf
 
 HS's requested interaction: choose one overflow app, put its real icon at the left edge of the
 visible controls (currently left of Wi-Fi), let HS click it to open the native interface, then click
@@ -17,7 +17,7 @@ dev.2/Ice/MenuBar/MenuBarItems/MenuBarItemManager.swift) contains temporary-item
 neighboring-item return destination. Its move implementation addresses events to an owning process
 and window, with event delivery synchronization and live frame checks. This suggests that an icon
 need not always be grabbed by an ordinary pointer hit. No Ice implementation code was incorporated
-into Barkeep.
+into BarShelf.
 
 ## Implementation and alternatives
 
@@ -28,7 +28,7 @@ into Barkeep.
    consume the release before an event tap observes it; fresh AX layout verification decides success.
    Every tap is scoped to the requested operation. There are no background event listeners or scans.
 2. Temporarily make room: hide a small group of visible controls while the chosen item is in use,
-   then restore them on the dots click. Moving Barkeep's own divider may help, but by itself it cannot
+   then restore them on the dots click. Moving BarShelf's own divider may help, but by itself it cannot
    arbitrarily extract a single icon from a group. This changes the visible layout and should remain
    a fallback product choice, not a silent action on every click.
 3. A slot that replaces the dots: temporarily use the dots' width for the selected real icon, with
@@ -58,7 +58,7 @@ not itself move another app's native menu or popover.
 
 ## Delayed menu response and revised interaction (2026-09-06)
 
-HS observed the menu opening shortly after Barkeep incorrectly reported that it had failed.
+HS observed the menu opening shortly after BarShelf incorrectly reported that it had failed.
 AXPress had collapsed every non-success response into false. Uncertain responses now remain
 unconfirmed rather than being described as menu failures. Explicitly unavailable controls retain
 recovery guidance. HS then chose the simpler overflow interaction: expose the icon only and let

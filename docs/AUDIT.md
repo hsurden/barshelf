@@ -1,26 +1,26 @@
-# Barkeep clean-room and safety audit
+# BarShelf clean-room and safety audit
 
 Audit date: 2026-08-23
 
 ## Scope and provenance
 
-This audit records the product and engineering constraints used to build Barkeep.
+This audit records the product and engineering constraints used to build BarShelf.
 Public menu bar manager source and permission-flow examples were reviewed at fixed
 revisions to understand platform behavior, failure modes, and user expectations.
 
-Barkeep is a clean-room implementation.
+BarShelf is a clean-room implementation.
 
 - No external source files, assets, names, or code are included.
-- Barkeep uses its own Swift implementation and native system frameworks.
+- BarShelf uses its own Swift implementation and native system frameworks.
 - External behavior was treated as research evidence, not as a specification.
-- Barkeep's product rules and live tests decide the final behavior.
+- BarShelf's product rules and live tests decide the final behavior.
 
-Barkeep is MIT licensed. Its core menu bar engine has no third-party runtime
+BarShelf is MIT licensed. Its core menu bar engine has no third-party runtime
 dependency. The update framework remains isolated from launch and menu bar behavior.
 
-## Barkeep product rules reviewed
+## BarShelf product rules reviewed
 
-| Area | Barkeep rule |
+| Area | BarShelf rule |
 |---|---|
 | Visibility sections | Always visible, Hidden, and Always hidden stay distinct |
 | Item arrangement | A direct drag or section-menu action can request one move |
@@ -38,7 +38,7 @@ dependency. The update framework remains isolated from launch and menu bar behav
 ### Permission setup can stay short
 
 The permission flow can do more than open a Privacy page while remaining narrow.
-Barkeep registers the Accessibility request, opens the exact settings page, follows
+BarShelf registers the Accessibility request, opens the exact settings page, follows
 the System Settings window with a small guide, and provides the signed app as a file
 drag source when it is missing from the list.
 
@@ -48,8 +48,8 @@ the permission.
 
 ### macOS owns status items and live layout
 
-There is no public API that assigns another process's status item to a Barkeep
-section. Barkeep uses its own status items as section boundaries and posts a
+There is no public API that assigns another process's status item to a BarShelf
+section. BarShelf uses its own status items as section boundaries and posts a
 user-initiated Command-drag when the user selects a new section.
 
 Saved geometry is never authoritative. Item frames are temporary evidence from the
@@ -80,7 +80,7 @@ collapsed boundary layout makes counts flap without any real move.
 Old geometry becomes unsafe after wake, display changes, and Space changes.
 Automatic repair can fight the user and move the pointer without a direct action.
 
-Barkeep therefore does not post synthetic input during launch, wake, display events,
+BarShelf therefore does not post synthetic input during launch, wake, display events,
 app events, timers, or update work. It may invalidate stale evidence and explain a
 problem, but only a direct item-section action can move one item.
 
@@ -90,14 +90,14 @@ The system already decides which menu bar items fit around a camera housing and
 hides overflow when space runs out. A straight cursor path crossing the center of a
 notched display does not prove that a move cannot land.
 
-Barkeep does not preemptively reject a Settings move because of an estimated notch
-rectangle. Displays without a notch follow the same path. Barkeep validates the
+BarShelf does not preemptively reject a Settings move because of an estimated notch
+rectangle. Displays without a notch follow the same path. BarShelf validates the
 source, target, and current screen, attempts the move, and trusts fresh confirmation
 scans instead of guessing from the display shape.
 
 ### Idle work must stay near zero
 
-Barkeep does not continuously scan Accessibility data. Settings and search request
+BarShelf does not continuously scan Accessibility data. Settings and search request
 fresh scans when needed. Optional reveal triggers own their timers, event monitors,
 and observers and stop them when disabled.
 
@@ -120,7 +120,7 @@ that users download.
 - Do not guess that a camera housing blocked a move.
 - Do not make updates part of app launch.
 
-## Test gates for Barkeep
+## Test gates for BarShelf
 
 Automated tests must cover pure state, boundary, target, and coordinate logic.
 Release validation must also check real behavior with the signed app because

@@ -1,6 +1,6 @@
 # Agent notes
 
-Barkeep is a local native macOS menu bar manager. It uses Swift 6, an AppKit lifecycle and status
+BarShelf is a local native macOS menu bar manager. It uses Swift 6, an AppKit lifecycle and status
 bar, SwiftUI views, and XcodeGen. The personal fork deliberately removed Sparkle so an upstream
 binary update cannot overwrite custom behavior.
 
@@ -17,7 +17,7 @@ binary update cannot overwrite custom behavior.
 - A move must use fresh Accessibility data and must pass a second scan before state is saved.
 - Launch, wake, display events, app events, timers, and updates must never move an item.
 - Touch ID or Mac password protection applies to the shelf, the picker, and overflow access.
-- Barkeep uses no account, telemetry, cloud sync, or Screen Recording.
+- BarShelf uses no account, telemetry, cloud sync, or Screen Recording.
 - Saved settings, rules, and profiles stay under Application Support.
 - Update failure cannot block app launch or the menu bar engine.
 
@@ -27,15 +27,15 @@ Read `docs/PRODUCT.md` before you change visible behavior. Keep `README.md` and
 ## Repo map
 
 ```text
-Sources/Barkeep/App/             app lifecycle and coordination
-Sources/Barkeep/Models/          settings, rules, profiles, and runtime types
-Sources/Barkeep/StatusBar/       visibility boundaries and menu bar icons
-Sources/Barkeep/Accessibility/   scans, permission checks, and confirmed moves
-Sources/Barkeep/Permissions/     guided Accessibility setup
-Sources/Barkeep/Storage/         local versioned JSON state
-Sources/Barkeep/System/          hotkeys, login, spacing, and update policy
-Sources/Barkeep/UI/              settings and item-picker windows
-Tests/BarkeepTests/              unit tests
+Sources/BarShelf/App/             app lifecycle and coordination
+Sources/BarShelf/Models/          settings, rules, profiles, and runtime types
+Sources/BarShelf/StatusBar/       visibility boundaries and menu bar icons
+Sources/BarShelf/Accessibility/   scans, permission checks, and confirmed moves
+Sources/BarShelf/Permissions/     guided Accessibility setup
+Sources/BarShelf/Storage/         local versioned JSON state
+Sources/BarShelf/System/          hotkeys, login, spacing, and update policy
+Sources/BarShelf/UI/              settings and item-picker windows
+Tests/BarShelfTests/              unit tests
 scripts/                         build, install, DMG, and release entry points
 .github/workflows/               public CI and release validation
 ```
@@ -50,7 +50,7 @@ make install
 make dmg
 ```
 
-`make check` runs XcodeGen before `xcodebuild test`. Generated `Barkeep.xcodeproj`, `.xcode-build`,
+`make check` runs XcodeGen before `xcodebuild test`. Generated `BarShelf.xcodeproj`, `.xcode-build`,
 and `dist` files are ignored. Do not commit them.
 
 ## App structure
@@ -65,7 +65,7 @@ its existing actor or queue.
 
 `StatusBarEngine` owns exactly two status items.
 
-1. The Barkeep control item
+1. The BarShelf control item
 2. The Always hidden boundary
 
 Its state is `resting` (section closed, everything else inline) or `open`. Only a confirmed move
@@ -104,7 +104,7 @@ permission to work around one move failure.
 `StateStore` writes one versioned JSON document with an atomic replace.
 
 ```text
-~/Library/Application Support/Barkeep/state.json
+~/Library/Application Support/BarShelf/state.json
 ```
 
 Import must reject unknown document versions. New saved fields need safe defaults so old documents
@@ -169,6 +169,14 @@ GitHub issues are open. Pull request creation is limited to repository collabora
 
 ## HS custom-fork context and product goal
 
+**Name.** On 2026-09-06 the fork was renamed from "Barkeep HS" to **BarShelf** (bundle identifier
+`com.hsurden.barshelf`, module `BarShelf`, state under `Application Support/BarShelf`, status item
+autosave names `BarShelf.*.v3`). "Barkeep" below refers to the upstream project or to history. On
+first launch the app copies the old `Application Support/Barkeep` folder and the old status item
+positions once; the local build still accepts the older `Barkeep HS Signing` certificate until a
+`BarShelf Signing` one exists. macOS treats the new bundle identifier as a new app, so
+Accessibility must be granted once more.
+
 This checkout is intended to become a personal, simpler replacement for Bartender on HS's Mac.
 Do not assume the upstream product behavior is the desired behavior merely because it already
 exists. Preserve the upstream safety constraints above, but optimize the user-facing workflow for
@@ -202,13 +210,13 @@ available right-side strip. Their icons then become unreachable, even though the
 still running and may have no Dock window or other practical way to open their controls.
 
 The primary goal is not merely to expand and collapse hidden icons in the same already-crowded menu
-bar. That is Barkeep's current normal-click behavior and does not reliably solve notch overflow.
+bar. That is BarShelf's current normal-click behavior and does not reliably solve notch overflow.
 The desired interaction is:
 
 1. HS chooses which important icons remain physically visible in the macOS menu bar.
 2. All remaining detected menu-bar items are available from a reliable software picker that is not
    constrained by physical menu-bar width or the camera notch.
-3. A normal click on a small Barkeep control, preferably `...` or a similar compact symbol, opens
+3. A normal click on a small BarShelf control, preferably `...` or a similar compact symbol, opens
    that picker immediately.
 4. The picker shows recognizable app icons and names, supports quick search, and distinguishes
    visible items from hidden/overflow items without making the interface complicated.
@@ -231,7 +239,7 @@ element.
 
 The installed app did not yet have macOS Accessibility permission during the initial inspection.
 Consequently, Arrange Items showed zero items in all three columns, Find Item could not populate,
-and no real inventory or behind-the-notch activation test was completed. Enabling Barkeep under
+and no real inventory or behind-the-notch activation test was completed. Enabling BarShelf under
 System Settings > Privacy & Security > Accessibility is therefore the next required live-test step.
 Because this is a macOS security-setting change, obtain the user's confirmation immediately before
 changing it through UI automation.
@@ -287,7 +295,7 @@ replacement, and signing deliberately before replacing the signed upstream app w
 build.
 
 `make local-build` is a supported fallback for this specific machine. It uses `swiftc` to build the
-no-Sparkle source into `dist/Barkeep HS.app` with bundle identifier `com.hsurden.barkeep` and an
+no-Sparkle source into `dist/BarShelf.app` with bundle identifier `com.hsurden.barshelf` and an
 ad-hoc signature. It deliberately does not overwrite `/Applications/Barkeep.app`. Expect macOS to
 forget Accessibility permission after some rebuilds until a stable signing identity is available.
 

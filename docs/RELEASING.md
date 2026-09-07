@@ -1,11 +1,11 @@
-# Release Barkeep
+# Release BarShelf
 
 > Personal-fork note: this inherited upstream release procedure is currently disabled and is kept
 > only as reference. It depends on the upstream Sparkle feed and repository. Do not run it for the
 > custom app without first designing a separate bundle identity, repository, signing setup, and
 > non-upstream release process.
 
-Barkeep uses a local signing workflow. Public builds use Developer ID signing, hardened runtime,
+BarShelf uses a local signing workflow. Public builds use Developer ID signing, hardened runtime,
 Apple notarization, DMG stapling, and Sparkle EdDSA signatures. GitHub checks the staged files and
 publishes the release after the signed appcast reaches `main`.
 
@@ -77,10 +77,10 @@ make release
 
 The command completes these steps.
 
-1. Builds and signs `dist/Barkeep.app`.
+1. Builds and signs `dist/BarShelf.app`.
 2. Checks the signature and hardened runtime.
 3. Launches the signed app as a smoke test.
-4. Builds and signs `dist/Barkeep-<version>.dmg`.
+4. Builds and signs `dist/BarShelf-<version>.dmg`.
 5. Sends the DMG to Apple for notarization.
 6. Staples and checks the notarization ticket.
 7. Creates the SHA-256 checksum.
@@ -116,10 +116,10 @@ gh run watch
 Download the DMG and checksum from GitHub. Check them as a user would.
 
 ```sh
-shasum -a 256 -c Barkeep-<version>.dmg.sha256
-hdiutil attach Barkeep-<version>.dmg
-codesign --verify --deep --strict --verbose=2 /Volumes/Barkeep/Barkeep.app
-spctl --assess --type execute --verbose=4 /Volumes/Barkeep/Barkeep.app
+shasum -a 256 -c BarShelf-<version>.dmg.sha256
+hdiutil attach BarShelf-<version>.dmg
+codesign --verify --deep --strict --verbose=2 /Volumes/BarShelf/BarShelf.app
+spctl --assess --type execute --verbose=4 /Volumes/BarShelf/BarShelf.app
 ```
 
 Install the app and use **Check for Updates** against the public appcast. Do this live update test

@@ -16,7 +16,7 @@ sparkle_key_path="${SPARKLE_PRIVATE_KEY_PATH:-}"
 sign_identity="${SIGN_IDENTITY:-}"
 team_id="${DEVELOPMENT_TEAM:-JXNCT3BEVQ}"
 publish="${PUBLISH:-0}"
-app_name="Barkeep"
+app_name="BarShelf"
 dist_dir="$repo_dir/dist"
 app_path="$dist_dir/$app_name.app"
 dmg_name="$app_name-$version.dmg"
@@ -136,7 +136,7 @@ if [[ "$publish" == "1" ]]; then
     gh release create "v$version" \
         "$dmg_path" \
         "$dmg_path.sha256" \
-        --title "Barkeep $version" \
+        --title "BarShelf $version" \
         --notes-file "$notes_file" \
         --draft
 

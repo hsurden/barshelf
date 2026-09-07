@@ -42,7 +42,7 @@ jobs:
           if not build.isdigit() or enclosure is None:
               raise SystemExit("newest appcast item has invalid build metadata")
 
-          asset = f"Barkeep-{version}.dmg"
+          asset = f"BarShelf-{version}.dmg"
           checksum = f"{asset}.sha256"
           expected_url = (
               f"https://github.com/{os.environ['REPOSITORY']}"
@@ -84,7 +84,7 @@ jobs:
             '.assets[] | select(.name == $name and .state == "uploaded")' \
             <<<"$release_json" >/dev/null
 
-          release_dir="$RUNNER_TEMP/barkeep-release"
+          release_dir="$RUNNER_TEMP/barshelf-release"
           mkdir -p "$release_dir"
           gh release download "$TAG" \
             --pattern "$ASSET" \

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 repo_dir="${0:A:h:h}"
-app_name="Barkeep"
+app_name="BarShelf"
 source "$repo_dir/version.env"
 version="${VERSION:-$MARKETING_VERSION}"
 dist_dir="$repo_dir/dist"

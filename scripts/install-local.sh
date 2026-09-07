@@ -3,7 +3,7 @@
 set -euo pipefail
 
 repo_dir="${0:A:h:h}"
-app_name="Barkeep"
+app_name="BarShelf"
 source_app="$repo_dir/dist/$app_name.app"
 install_dir="${INSTALL_DIR:-$HOME/Applications}"
 installed_app="$install_dir/$app_name.app"

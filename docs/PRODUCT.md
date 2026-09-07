@@ -1,23 +1,26 @@
-# Barkeep product rules
+# BarShelf product rules
 
 This document defines the behavior that users can depend on. Keep these rules stable unless a
 product decision changes them.
 
 ## Every menu bar item belongs to one section
 
-Barkeep always uses the same two names and meanings.
+BarShelf always uses the same two names and meanings.
 
 1. **In the menu bar** items stay inline until macOS overflows them behind the notch.
 2. **Always hidden** items stay in the shelf and picker without consuming physical menu-bar space.
 
-The Items screen shows both sections at the same time. The in-bar column reorders the real bar by
-drag; an item's row menu moves it between sections. There is no separate reveal-toggle section and
-no classic hide-and-reveal mode.
+The Items screen shows both sections at the same time, grouped by where each icon really is, not
+by its saved rule. Selecting an item and pressing the arrow between the columns, or dragging it
+across, moves it immediately through the confirmed move path. The in-bar column reorders the real
+bar by drag. A rule that says Always hidden while macOS keeps drawing the icon is dropped after two
+consecutive scans, so the columns and the shelf never disagree with the bar. There is no separate
+reveal-toggle section and no classic hide-and-reveal mode.
 
 ## Main controls stay predictable
 
 - A click opens a stable shelf snapshot.
-- The overflow gear opens a menu below it: **Settings**, then **Quit Barkeep HS**.
+- The overflow gear opens a menu below it: **Settings**, then **Quit BarShelf**.
 - An Option-click opens the searchable item picker.
 - A right-click opens a short command menu.
 - `Command-Backslash` opens or closes the shelf.
@@ -30,35 +33,35 @@ the leftmost currently drawable icon. The hidden group stays closed throughout t
 an overflow entry exposes the icon only; it does not send AXPress or open its menu. The user clicks
 the real icon when ready. The icon must be confirmed at that left edge and fully outside the notch
 before the temporary session begins. It remains available after its menu closes; Escape or a normal
-Barkeep click requests a verified return to its original neighbors. There is no automatic timeout.
+BarShelf click requests a verified return to its original neighbors. There is no automatic timeout.
 Temporary moves never change saved rules or priority order. Window-addressed input avoids a visible
-pointer drag and also handles the return. If a return fails, Barkeep retains its return address in
+pointer drag and also handles the return. If a return fails, BarShelf retains its return address in
 memory and offers another explicit click to retry. The picker supports filtering and links directly
 to arrangement. The right-click menu contains the shelf, the picker, and Settings. Less common
-settings stay in the settings window. The App section in Settings includes an explicit Quit Barkeep
+settings stay in the settings window. The App section in Settings includes an explicit Quit BarShelf
 HS action.
 
 ## Item moves require a direct user action
 
-Barkeep can post a Command-drag after the user chooses a new section for one item, explicitly
+BarShelf can post a Command-drag after the user chooses a new section for one item, explicitly
 reorders it, or selects an overflow item for temporary access. Closing that temporary session
-authorizes the return move; quitting Barkeep first attempts this return. The app
+authorizes the return move; quitting BarShelf first attempts this return. The app
 must make a fresh Accessibility scan before the move and another scan after it. It saves the new
 rule only when the second scan confirms the result.
 
 Launch, wake, display changes, app changes, timers, and update checks must never move an item.
-Barkeep can explain a problem and offer a user action. It cannot repair the layout in the
+BarShelf can explain a problem and offer a user action. It cannot repair the layout in the
 background.
 
 ## Accessibility setup stays short
 
-Barkeep does not use a long onboarding flow. When Accessibility access is missing it uses this
+BarShelf does not use a long onboarding flow. When Accessibility access is missing it uses this
 short process.
 
 1. Register the macOS permission request.
 2. Open the Accessibility page in System Settings.
 3. Show a small guide over System Settings.
-4. Provide a draggable Barkeep app tile when the app is missing from the list.
+4. Provide a draggable BarShelf app tile when the app is missing from the list.
 5. Close the guide after macOS grants access.
 
 The app must explain why it needs the permission. It must not ask for Screen Recording to provide
@@ -72,7 +75,7 @@ confirmed move sequence, and it closes again on its own shortly after.
 
 | Setting | Default |
 |---|---|
-| Click the Barkeep icon | Open the overflow shelf |
+| Click the BarShelf icon | Open the overflow shelf |
 | Require Touch ID or the Mac password | Off |
 | Start at login | Off |
 | Show a Dock icon | Off |
@@ -80,7 +83,7 @@ confirmed move sequence, and it closes again on its own shortly after.
 
 ## Icons stay small and native
 
-Ellipsis is the default. Barkeep also provides seven monochrome menu bar symbols.
+Ellipsis is the default. BarShelf also provides seven monochrome menu bar symbols.
 
 - Dot
 - Ring
@@ -96,10 +99,10 @@ with light and dark menu bars.
 
 ## Private data stays local
 
-Barkeep has no account, telemetry, or cloud sync. It stores settings, item rules, and profiles in
+BarShelf has no account, telemetry, or cloud sync. It stores settings, item rules, and profiles in
 one versioned JSON document under Application Support. Export uses the same document format.
 
-Persistent item identity must not depend on mutable status text. Barkeep uses an Accessibility
+Persistent item identity must not depend on mutable status text. BarShelf uses an Accessibility
 identifier when the owner provides one and otherwise reconciles a stable per-owner slot. Older
 label-based rules migrate only after a live scan provides matching evidence.
 

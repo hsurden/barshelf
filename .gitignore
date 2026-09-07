@@ -2,7 +2,7 @@
 .build/
 build/
 DerivedData/
-Barkeep.xcodeproj/
+BarShelf.xcodeproj/
 .xcode-build/
 dist/
 .signing-identity

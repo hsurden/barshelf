@@ -8,7 +8,7 @@ local-build:
 
 check:
 	xcodegen generate
-	xcodebuild -quiet -project Barkeep.xcodeproj -scheme Barkeep -configuration Debug -derivedDataPath .xcode-build CODE_SIGNING_ALLOWED=NO test
+	xcodebuild -quiet -project BarShelf.xcodeproj -scheme BarShelf -configuration Debug -derivedDataPath .xcode-build CODE_SIGNING_ALLOWED=NO test
 
 dmg:
 	./scripts/build-dmg.sh

@@ -1,6 +1,6 @@
-name: Barkeep
+name: BarShelf
 options:
-  bundleIdPrefix: is.ian
+  bundleIdPrefix: com.hsurden
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
@@ -12,42 +12,42 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
     CODE_SIGN_STYLE: Automatic
 targets:
-  Barkeep:
+  BarShelf:
     type: application
     platform: macOS
     sources:
-      - path: Sources/Barkeep
+      - path: Sources/BarShelf
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: is.ian.barkeep
-        PRODUCT_NAME: Barkeep
+        PRODUCT_BUNDLE_IDENTIFIER: com.hsurden.barshelf
+        PRODUCT_NAME: BarShelf
         GENERATE_INFOPLIST_FILE: NO
-        INFOPLIST_FILE: Sources/Barkeep/Info.plist
+        INFOPLIST_FILE: Sources/BarShelf/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         MARKETING_VERSION: 0.1.0
         CURRENT_PROJECT_VERSION: 1
         SWIFT_STRICT_CONCURRENCY: complete
     entitlements:
-      path: Sources/Barkeep/Barkeep.entitlements
+      path: Sources/BarShelf/BarShelf.entitlements
       properties:
         com.apple.security.app-sandbox: false
-  BarkeepTests:
+  BarShelfTests:
     type: bundle.unit-test
     platform: macOS
     sources:
-      - path: Tests/BarkeepTests
+      - path: Tests/BarShelfTests
     dependencies:
-      - target: Barkeep
+      - target: BarShelf
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: is.ian.barkeep.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.hsurden.barshelf.tests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
-  Barkeep:
+  BarShelf:
     build:
       targets:
-        Barkeep: all
-        BarkeepTests: [test]
+        BarShelf: all
+        BarShelfTests: [test]
     test:
       targets:
-        - BarkeepTests
+        - BarShelfTests

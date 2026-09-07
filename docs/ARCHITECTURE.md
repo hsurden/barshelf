@@ -1,20 +1,20 @@
-# Barkeep architecture
+# BarShelf architecture
 
-Barkeep is one native macOS process. AppKit owns the application lifecycle, status items, panels,
+BarShelf is one native macOS process. AppKit owns the application lifecycle, status items, panels,
 global input, and macOS services. SwiftUI draws the settings, search, and permission views.
 
 ## Source map
 
 ```text
-Sources/Barkeep/App/             lifecycle and AppCoordinator
-Sources/Barkeep/Models/          saved and runtime state types
-Sources/Barkeep/StatusBar/       two status items and icon rendering
-Sources/Barkeep/Accessibility/   permission checks, scans, and item moves
-Sources/Barkeep/Permissions/     guided Accessibility setup
-Sources/Barkeep/Storage/         versioned local JSON storage
-Sources/Barkeep/System/          hotkeys, login, spacing, and update policy
-Sources/Barkeep/UI/              settings and search windows
-Tests/BarkeepTests/              unit tests
+Sources/BarShelf/App/             lifecycle and AppCoordinator
+Sources/BarShelf/Models/          saved and runtime state types
+Sources/BarShelf/StatusBar/       two status items and icon rendering
+Sources/BarShelf/Accessibility/   permission checks, scans, and item moves
+Sources/BarShelf/Permissions/     guided Accessibility setup
+Sources/BarShelf/Storage/         versioned local JSON storage
+Sources/BarShelf/System/          hotkeys, login, spacing, and update policy
+Sources/BarShelf/UI/              settings and search windows
+Tests/BarShelfTests/              unit tests
 scripts/                         build, install, DMG, and release tools
 ```
 
@@ -76,7 +76,7 @@ A menu bar item frame is valid only for the scan that returned it. Saved state c
 coordinates and no Accessibility objects.
 
 The move service rejects empty or very large source frames. Both endpoints must be on a current
-screen. macOS owns menu bar overflow around a camera notch, so Barkeep does not reject a move just
+screen. macOS owns menu bar overflow around a camera notch, so BarShelf does not reject a move just
 because the cursor path crosses the center of a notched display. The second scan remains the source
 of truth for whether the item landed.
 
@@ -93,17 +93,17 @@ or a per-owner slot and migrates older label-based keys after a matching scan.
 Shelf activation follows one serialized lifecycle: resting, shelf open, revealing the selected
 item, manual interaction, and restoring. The selected item remains physically available without a
 timer, including after its native menu or popover closes. A global Escape monitor or another normal
-click on Barkeep explicitly ends the session and restores the hidden layout.
+click on BarShelf explicitly ends the session and restores the hidden layout.
 
 ## Local state uses one versioned document
 
 `StateStore` writes this file with an atomic replace.
 
 ```text
-~/Library/Application Support/Barkeep/state.json
+~/Library/Application Support/BarShelf/state.json
 ```
 
-`BarkeepDocument` contains its format version, settings, item rules, group names, and profiles.
+`BarShelfDocument` contains its format version, settings, item rules, group names, and profiles.
 JSON dates use ISO 8601. Import rejects a document with an unknown version.
 
 Menu bar frames and Accessibility elements stay in memory. They are never written to disk.
@@ -113,7 +113,7 @@ Menu bar frames and Accessibility elements stay in memory. They are never writte
 - Accessibility is required to list, open, and move other apps' status items.
 - Touch ID or the Mac password is used only when reveal protection is on.
 - Launch at Login is optional and uses the main app service.
-- Tighter spacing changes two user-level macOS preferences. Barkeep records the old values and
+- Tighter spacing changes two user-level macOS preferences. BarShelf records the old values and
   restores them when the setting is off.
 - Screen Recording is not used.
 - The core app needs no network access.
