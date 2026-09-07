@@ -1,3 +1,9 @@
+BarShelf 0.2.1
+
+- Added the glass shelf app icon to the app bundle, Finder, and drag-install DMG
+- The menu bar control still uses the selected monochrome symbol, with three dots as the default
+- This personal-certificate release is not notarized; first launch still requires Open Anyway in System Settings > Privacy & Security
+
 BarShelf 0.2.0
 
 - Renamed from Barkeep HS to BarShelf (bundle identifier `com.hsurden.barshelf`)

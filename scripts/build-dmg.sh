@@ -25,6 +25,12 @@ if [[ ! -d "$app_path" ]]; then
     exit 66
 fi
 
+if [[ ! -s "$app_path/Contents/Resources/AppIcon.icns" ]] || \
+    [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$app_path/Contents/Info.plist")" != "AppIcon" ]]; then
+    echo "$app_path is missing its configured app icon; rebuild before packaging" >&2
+    exit 65
+fi
+
 ditto "$app_path" "$staging_dir/$app_name.app"
 ln -s /Applications "$staging_dir/Applications"
 rm -f "$dmg_path"
