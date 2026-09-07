@@ -30,6 +30,7 @@ swiftc -O \
     -o "$executable_path"
 
 cp Sources/BarShelf/Info.plist "$info_path"
+cp Sources/BarShelf/Resources/AppIcon.icns "$contents_dir/Resources/AppIcon.icns"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $app_name" "$info_path"
 /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $app_name" "$info_path"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $bundle_id" "$info_path"

@@ -2,6 +2,11 @@
 
 Use these checks before you reset settings or report a bug.
 
+## Identify the app icon
+
+BarShelf's app icon shows blue, turquoise, and orange tiles on a glass shelf. The menu bar control
+uses the monochrome symbol selected in Settings, with three dots as the default.
+
 ## BarShelf cannot find menu bar items
 
 Open **BarShelf Settings**, select **Advanced**, and check the Accessibility status. Select **Set

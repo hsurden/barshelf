@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="Sources/BarShelf/AppIcon.icon/Assets/barshelf.svg" width="150" alt="BarShelf">
+<img src="Sources/BarShelf/Resources/AppIcon.png" width="150" alt="BarShelf">
 
 # BarShelf
 
@@ -22,37 +22,20 @@ BarShelf splits the menu bar into two sections.
 
 | Section | What BarShelf does |
 |---|---|
-| **In the menu bar** | These items stay inline until macOS overflows them behind the notch. |
-| **Always hidden** | These stay in the shelf and picker without taking physical menu-bar space. |
-
-Open the **Items** tab in Settings to see both sections together. The columns show where each
-icon really is right now. Select an item and press the arrow between the lists, or drag it across,
-to move it at once; drag within the left list to reorder the bar. BarShelf checks the real menu bar
-after each move and saves the new section only when macOS completes it.
+| **Visible In the menu bar** |Choose toolbar items that you want to see  |
+| **Hidden** | Click the ... to reveal the hidden items.  Click on any one to see it's menu, click on ... again to make it disapepar back into the shelf      |
 
 The default BarShelf icon is a compact ellipsis. You can choose from eight monochrome symbols.
+
+This is inspired by and built upon Barkeep 
+https://github.com/iannuttall/barkeep
 
 ## Use BarShelf without leaving your current app
 
 - Click the BarShelf icon to open a stable shelf of overflowed and Always hidden items.
 - Click the shelf’s gear for **Settings**, followed by **Quit BarShelf**.
 - Type while the shelf is open, or Option-click the icon, to open the searchable full picker.
-- Right-click the icon for the shelf, the picker, and Settings.
-- Press `Command-Backslash` to open or close the shelf.
-- Press `Command-Shift-Space` to open the item picker.
 
-Choose an overflow entry to temporarily put that app's real icon at the left edge of the visible
-menu-bar icons (for example, just left of Wi-Fi). Click the exposed icon yourself to open its menu;
-selecting it in overflow does not click it automatically. Only the selected hidden item comes out,
-and the hidden group stays closed without a visible pointer drag. Click the three dots again or
-press Escape to return it to its original neighbors. Closing the app's menu alone leaves the icon
-available. Saved sections and priority order do not change.
-If there is no room outside the notch or macOS refuses the move, BarShelf reports the failure and
-attempts a verified return. This uses undocumented window routing and can vary across macOS releases.
-
-There is no classic hide-and-reveal mode and no hover, scroll, or click trigger. Every item stays
-in the bar until macOS overflows it, and the shelf is the one place to reach the rest.
-The App section in Settings includes a Quit BarShelf button.
 
 ## Your menu bar data stays on your Mac
 
@@ -144,24 +127,8 @@ Read [AGENTS.md](AGENTS.md) before changing the app. The supporting docs cover t
 [clean-room source audit](docs/AUDIT.md), [common problems](docs/TROUBLESHOOTING.md), and
 [release process](docs/RELEASING.md).
 
-## Current limits
 
-The current app includes the two visibility sections, safe item moves, the overflow shelf, the
-item picker, Touch ID protection, profiles, backups, and tighter item spacing. This personal fork
-does not accept automatic upstream app updates; upstream changes are reviewed and merged as source.
 
-A second menu bar, custom bar styling, low-battery rules, scripts, and network triggers are not
-part of the current app. Profiles save BarShelf's stored rules and settings. Loading a profile does
-not move every real menu bar item into place yet.
-
-## Report bugs and request features
-
-Open a [GitHub issue](https://github.com/iannuttall/barkeep/issues) with your macOS version, display
-layout, the app that owns the menu bar item, and what BarShelf did. The
-[troubleshooting guide](docs/TROUBLESHOOTING.md) lists safe checks for common problems.
-
-Pull request creation is limited to repository collaborators. This keeps changes tied to the menu
-bar safety rules and signed release checks.
 
 ## License
 
