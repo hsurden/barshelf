@@ -59,11 +59,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await self?.coordinator.printDebugScan()
             }
         }
-        if ProcessInfo.processInfo.arguments.contains("--show-hidden-items") {
-            DispatchQueue.main.async { [weak self] in
-                self?.coordinator.revealHiddenItemsForLaunchTest()
-            }
-        }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

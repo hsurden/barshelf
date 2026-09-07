@@ -36,32 +36,6 @@ struct SettingsView: View {
     }
 }
 
-/// Zone labels differ by mode: shelf mode has no reveal-toggle "Hidden"
-/// section, so it offers two zones with wording that matches the shelf.
-enum ZonePresentation {
-    static func zones(for mode: MenuBarMode) -> [VisibilityZone] {
-        mode == .overflowShelf ? [.alwaysVisible, .alwaysHidden] : VisibilityZone.allCases
-    }
-
-    static func title(for zone: VisibilityZone, mode: MenuBarMode) -> String {
-        guard mode == .overflowShelf else { return zone.title }
-        switch zone {
-        case .alwaysVisible: return "In the menu bar"
-        case .hidden: return zone.title
-        case .alwaysHidden: return "Always hidden"
-        }
-    }
-
-    static func help(for zone: VisibilityZone, mode: MenuBarMode) -> String {
-        guard mode == .overflowShelf else { return zone.help }
-        switch zone {
-        case .alwaysVisible: return "Drag to reorder. The top item stays rightmost, safest from the notch."
-        case .hidden: return zone.help
-        case .alwaysHidden: return "Kept out of the menu bar. Open it from the shelf or the picker."
-        }
-    }
-}
-
 private struct ItemsSettingsView: View {
     @ObservedObject var coordinator: AppCoordinator
 
@@ -71,9 +45,7 @@ private struct ItemsSettingsView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Menu bar items")
                         .font(.title2.weight(.semibold))
-                    Text(coordinator.menuBarMode == .overflowShelf
-                         ? "Drag to reorder the bar. Use an item's menu to hide or unhide it."
-                         : "Put each item in one clear section.")
+                    Text("Drag to reorder the bar. Use an item's menu to hide or unhide it.")
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -84,7 +56,7 @@ private struct ItemsSettingsView: View {
                     Task { await coordinator.refreshItems(promptForPermission: true) }
                 }
                 .disabled(coordinator.isScanning || coordinator.movingItemID != nil)
-                if coordinator.menuBarMode == .overflowShelf, coordinator.pendingHideCount > 0 {
+                if coordinator.pendingHideCount > 0 {
                     Button("Reapply Hidden Items") {
                         Task { await coordinator.reapplyHiddenItems() }
                     }
@@ -109,7 +81,7 @@ private struct ItemsSettingsView: View {
             }
 
             HStack(alignment: .top, spacing: 12) {
-                ForEach(ZonePresentation.zones(for: coordinator.menuBarMode)) { zone in
+                ForEach(VisibilityZone.allCases) { zone in
                     ZoneColumn(zone: zone, coordinator: coordinator)
                 }
             }
@@ -131,22 +103,20 @@ private struct ZoneColumn: View {
         coordinator.itemsForSettings(in: zone)
     }
 
-    /// Shelf mode's in-bar column reorders the real bar by drag.
-    private var isReorderColumn: Bool {
-        coordinator.menuBarMode == .overflowShelf && zone == .alwaysVisible
-    }
+    /// The in-bar column reorders the real bar by drag.
+    private var isReorderColumn: Bool { zone == .alwaysVisible }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(ZonePresentation.title(for: zone, mode: coordinator.menuBarMode))
+                Text(zone.title)
                     .font(.headline)
                 Spacer()
                 Text("\(zoneItems.count)")
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
-            Text(ZonePresentation.help(for: zone, mode: coordinator.menuBarMode))
+            Text(zone.help)
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -179,7 +149,7 @@ private struct ZoneColumn: View {
                             ItemRow(item: item, coordinator: coordinator)
                         }
                         if zoneItems.isEmpty {
-                            Text(isShelfMode ? "Nothing is hidden" : "Drop an item here")
+                            Text("Nothing is hidden")
                                 .foregroundStyle(.tertiary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 28)
@@ -203,7 +173,6 @@ private struct ZoneColumn: View {
         }
     }
 
-    private var isShelfMode: Bool { coordinator.menuBarMode == .overflowShelf }
 }
 
 private struct ItemRow: View {
@@ -234,8 +203,8 @@ private struct ItemRow: View {
                 ProgressView().controlSize(.small)
             } else {
                 Menu {
-                    ForEach(ZonePresentation.zones(for: coordinator.menuBarMode)) { zone in
-                        Button(ZonePresentation.title(for: zone, mode: coordinator.menuBarMode)) {
+                    ForEach(VisibilityZone.allCases) { zone in
+                        Button(zone.title) {
                             Task { await coordinator.moveItem(item, to: zone) }
                         }
                     }
@@ -289,52 +258,6 @@ private struct BehaviorSettingsView: View {
 
     var body: some View {
         Form {
-            Section("Menu bar mode") {
-                Picker("Mode", selection: modeBinding) {
-                    ForEach(MenuBarMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .pickerStyle(.radioGroup)
-                Text(store.settings.mode.help)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if store.settings.mode == .classic {
-            Section("Show and hide") {
-                SettingsToggle("Hide items again", isOn: setting(\.autoRehide))
-                if store.settings.autoRehide {
-                    LabeledContent("Hide delay") {
-                        Stepper(
-                            "\(store.settings.rehideDelay, specifier: "%.0f") seconds",
-                            value: setting(\.rehideDelay),
-                            in: 1...60,
-                            step: 1
-                        )
-                    }
-                }
-                SettingsToggle("Hide when the active app changes", isOn: setting(\.hideOnAppChange))
-            }
-            Section("Ways to reveal") {
-                SettingsToggle("Click the menu bar", isOn: setting(\.showOnMenuBarClick))
-                SettingsToggle("Hover over the menu bar", isOn: setting(\.showOnHover))
-                if store.settings.showOnHover {
-                    LabeledContent("Hover delay") {
-                        Stepper(
-                            "\(store.settings.hoverDelay, specifier: "%.1f") seconds",
-                            value: setting(\.hoverDelay),
-                            in: 0.2...3,
-                            step: 0.1
-                        )
-                    }
-                }
-                SettingsToggle("Scroll in the menu bar", isOn: setting(\.showOnScroll))
-                SettingsToggle(
-                    "Keep items open with an external display",
-                    isOn: setting(\.alwaysShowOnExternalDisplay)
-                )
-            }
-            }
             Section("Privacy") {
                 SettingsToggle(
                     "Use Touch ID or the Mac password before reveal",
@@ -355,27 +278,12 @@ private struct BehaviorSettingsView: View {
                 }
             }
             Section("Keyboard shortcuts") {
-                LabeledContent(
-                    store.settings.mode == .overflowShelf
-                        ? "Open or close the shelf"
-                        : "Show or hide items",
-                    value: "⌘\\"
-                )
+                LabeledContent("Open or close the shelf", value: "⌘\\")
                 LabeledContent("Open item picker", value: "⌘⇧Space")
             }
         }
         .formStyle(.grouped)
         .padding(12)
-    }
-
-    private var modeBinding: Binding<MenuBarMode> {
-        Binding(
-            get: { store.settings.mode },
-            set: { value in
-                store.updateSettings { $0.menuBarMode = value }
-                coordinator.settingsDidChange()
-            }
-        )
     }
 
     private func setting<Value>(_ keyPath: WritableKeyPath<BarkeepSettings, Value>) -> Binding<Value> {

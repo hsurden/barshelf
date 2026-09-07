@@ -6,19 +6,11 @@ struct SearchPanelView: View {
     @State private var query = ""
     @FocusState private var searchFocused: Bool
 
-    private var isShelfMode: Bool { coordinator.menuBarMode == .overflowShelf }
-
     private var contents: MenuBarPickerContents {
-        if isShelfMode {
-            // Nothing is deliberately hidden in shelf mode; the first section
-            // is the set of items macOS pushed behind the notch or off screen.
-            MenuBarPickerContents(items: coordinator.items, query: query) {
-                coordinator.isOverflowed($0) ? .hidden : .alwaysVisible
-            }
-        } else {
-            MenuBarPickerContents(items: coordinator.items, query: query) {
-                coordinator.currentZone(for: $0)
-            }
+        // The first section is the set of items macOS pushed behind the notch
+        // or off screen, plus anything saved as Always hidden.
+        MenuBarPickerContents(items: coordinator.items, query: query) {
+            coordinator.isOverflowed($0) ? .alwaysHidden : .alwaysVisible
         }
     }
 

@@ -3,47 +3,38 @@ import CoreGraphics
 
 enum VisibilityZone: String, Codable, CaseIterable, Identifiable, Sendable {
     case alwaysVisible
-    case hidden
     case alwaysHidden
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .alwaysVisible: "Always visible"
-        case .hidden: "Hidden"
+        case .alwaysVisible: "In the menu bar"
         case .alwaysHidden: "Always hidden"
         }
     }
 
     var help: String {
         switch self {
-        case .alwaysVisible: "Barkeep never hides these items."
-        case .hidden: "Available in the picker and with the show/hide shortcut."
-        case .alwaysHidden: "Available in the picker without taking menu bar space."
-        }
-    }
-}
-
-enum MenuBarMode: String, Codable, CaseIterable, Identifiable, Sendable {
-    case overflowShelf
-    case classic
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .overflowShelf: "Overflow shelf"
-        case .classic: "Classic hide and reveal"
+        case .alwaysVisible: "Drag to reorder. The top item stays rightmost, safest from the notch."
+        case .alwaysHidden: "Kept out of the menu bar. Open it from the shelf or the picker."
         }
     }
 
-    var help: String {
-        switch self {
-        case .overflowShelf:
-            "Every icon stays in the menu bar until it overflows. The shelf lists overflowed and Always hidden items."
-        case .classic:
-            "Barkeep hides the items you put in the Hidden and Always hidden sections, with the reveal shortcut and boundaries."
+    /// Documents written before the classic hide-and-reveal mode was removed
+    /// can carry a `hidden` zone. That section no longer exists, so its rules
+    /// load as In the menu bar rather than failing the whole document.
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        if raw == "hidden" {
+            self = .alwaysVisible
+        } else if let zone = VisibilityZone(rawValue: raw) {
+            self = zone
+        } else {
+            throw DecodingError.dataCorrupted(.init(
+                codingPath: decoder.codingPath,
+                debugDescription: "Unknown visibility zone \(raw)"
+            ))
         }
     }
 }
@@ -78,18 +69,7 @@ struct BarkeepSettings: Codable, Equatable, Sendable {
     var launchAtLogin = false
     var showDockIcon = false
     var iconStyle: BarkeepIconStyle = .ellipsis
-    var autoRehide = true
-    var rehideDelay: TimeInterval = 5
-    var hideOnAppChange = false
-    var showOnHover = false
-    var hoverDelay: TimeInterval = 1
-    var showOnScroll = false
-    var showOnMenuBarClick = true
-
     var requireAuthentication = false
-    var showOnLowBattery = false
-    var lowBatteryLevel = 20
-    var alwaysShowOnExternalDisplay = false
 
     var useCustomAppearance = false
     var appearanceOpacity = 0.16
@@ -98,11 +78,6 @@ struct BarkeepSettings: Codable, Equatable, Sendable {
     var reduceItemSpacing = false
     var itemSpacing = 4
     var itemPadding = 4
-
-    // Optional so documents saved before this field existed keep decoding.
-    var menuBarMode: MenuBarMode?
-
-    var mode: MenuBarMode { menuBarMode ?? .overflowShelf }
 }
 
 struct ItemRule: Codable, Hashable, Identifiable, Sendable {
@@ -268,40 +243,25 @@ extension MenuBarItemSnapshot {
 
 struct BoundaryFrames: Sendable {
     let control: CGRect
-    let hidden: CGRect
     let alwaysHidden: CGRect
 
     func zone(for itemFrame: CGRect) -> VisibilityZone {
-        if itemFrame.midX > control.midX || itemFrame.midX > hidden.midX {
+        if itemFrame.midX > control.midX || itemFrame.midX > alwaysHidden.midX {
             return .alwaysVisible
-        }
-        if itemFrame.midX > alwaysHidden.midX {
-            return .hidden
         }
         return .alwaysHidden
     }
 
     func targetPoint(for zone: VisibilityZone) -> CGPoint? {
-        // The two boundary frames coincide in overflow-shelf mode, where the
-        // Always hidden boundary doubles as the hidden boundary.
-        guard alwaysHidden.midX <= hidden.midX,
-              hidden.midX < control.midX else {
-            return nil
-        }
+        guard alwaysHidden.midX < control.midX else { return nil }
 
         let y = control.midY
         switch zone {
         case .alwaysVisible:
-            guard hidden.maxX <= control.minX else { return nil }
-            let x = hidden.maxX == control.minX
-                ? hidden.maxX + 1
-                : (hidden.maxX + control.minX) / 2
-            return CGPoint(x: x, y: y)
-        case .hidden:
-            guard alwaysHidden.maxX <= hidden.minX else { return nil }
-            let x = alwaysHidden.maxX == hidden.minX
+            guard alwaysHidden.maxX <= control.minX else { return nil }
+            let x = alwaysHidden.maxX == control.minX
                 ? alwaysHidden.maxX + 1
-                : (alwaysHidden.maxX + hidden.minX) / 2
+                : (alwaysHidden.maxX + control.minX) / 2
             return CGPoint(x: x, y: y)
         case .alwaysHidden:
             return CGPoint(x: alwaysHidden.minX - 18, y: y)
@@ -362,7 +322,7 @@ enum BarkeepError: LocalizedError {
         case .boundariesUnavailable: "Barkeep could not find its section boundaries."
         case .invalidGeometry: "The current menu bar layout is not safe for this move."
         case .moveNotConfirmed: "macOS did not complete the move. Barkeep kept the old section."
-        case .authenticationFailed: "Barkeep did not reveal the hidden items."
+        case .authenticationFailed: "Barkeep did not open the hidden items."
         }
     }
 }

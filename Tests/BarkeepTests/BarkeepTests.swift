@@ -5,17 +5,12 @@ final class BarkeepTests: XCTestCase {
     func testBoundaryClassification() {
         let boundaries = BoundaryFrames(
             control: CGRect(x: 900, y: 900, width: 20, height: 24),
-            hidden: CGRect(x: 700, y: 900, width: 10, height: 24),
             alwaysHidden: CGRect(x: 400, y: 900, width: 10, height: 24)
         )
 
         XCTAssertEqual(
             boundaries.zone(for: CGRect(x: 800, y: 900, width: 20, height: 24)),
             .alwaysVisible
-        )
-        XCTAssertEqual(
-            boundaries.zone(for: CGRect(x: 550, y: 900, width: 20, height: 24)),
-            .hidden
         )
         XCTAssertEqual(
             boundaries.zone(for: CGRect(x: 250, y: 900, width: 20, height: 24)),
@@ -26,21 +21,18 @@ final class BarkeepTests: XCTestCase {
     func testSystemItemsRightOfControlAreAlwaysVisible() {
         let boundaries = BoundaryFrames(
             control: CGRect(x: 900, y: 876, width: 20, height: 24),
-            hidden: CGRect(x: 950, y: 876, width: 14, height: 24),
             alwaysHidden: CGRect(x: 400, y: 876, width: 14, height: 24)
         )
         let systemItem = CGRect(x: 920, y: 876, width: 20, height: 24)
 
         XCTAssertGreaterThan(systemItem.midX, boundaries.control.midX)
-        XCTAssertLessThan(systemItem.midX, boundaries.hidden.midX)
         XCTAssertEqual(boundaries.zone(for: systemItem), .alwaysVisible)
     }
 
     func testBoundaryTargetsAllowEmptySections() throws {
         let boundaries = BoundaryFrames(
             control: CGRect(x: 900, y: 876, width: 20, height: 24),
-            hidden: CGRect(x: 886, y: 876, width: 14, height: 24),
-            alwaysHidden: CGRect(x: 872, y: 876, width: 14, height: 24)
+            alwaysHidden: CGRect(x: 886, y: 876, width: 14, height: 24)
         )
 
         XCTAssertEqual(
@@ -48,12 +40,8 @@ final class BarkeepTests: XCTestCase {
             CGPoint(x: 901, y: 888)
         )
         XCTAssertEqual(
-            boundaries.targetPoint(for: .hidden),
-            CGPoint(x: 887, y: 888)
-        )
-        XCTAssertEqual(
             boundaries.targetPoint(for: .alwaysHidden),
-            CGPoint(x: 854, y: 888)
+            CGPoint(x: 868, y: 888)
         )
 
         let visibleTarget = try XCTUnwrap(boundaries.targetPoint(for: .alwaysVisible))
@@ -64,22 +52,20 @@ final class BarkeepTests: XCTestCase {
     func testTargetMovesItemOutOfAlwaysHidden() throws {
         let boundaries = BoundaryFrames(
             control: CGRect(x: 900, y: 876, width: 20, height: 24),
-            hidden: CGRect(x: 700, y: 876, width: 14, height: 24),
             alwaysHidden: CGRect(x: 400, y: 876, width: 14, height: 24)
         )
         let initialFrame = CGRect(x: 250, y: 876, width: 22, height: 24)
-        let hiddenTarget = try XCTUnwrap(boundaries.targetPoint(for: .hidden))
-        let movedFrame = CGRect(x: hiddenTarget.x - 11, y: 876, width: 22, height: 24)
+        let visibleTarget = try XCTUnwrap(boundaries.targetPoint(for: .alwaysVisible))
+        let movedFrame = CGRect(x: visibleTarget.x - 11, y: 876, width: 22, height: 24)
 
         XCTAssertEqual(boundaries.zone(for: initialFrame), .alwaysHidden)
-        XCTAssertEqual(boundaries.zone(for: movedFrame), .hidden)
+        XCTAssertEqual(boundaries.zone(for: movedFrame), .alwaysVisible)
     }
 
     func testBoundaryTargetsRejectInvalidOrdering() {
         let boundaries = BoundaryFrames(
-            control: CGRect(x: 900, y: 876, width: 20, height: 24),
-            hidden: CGRect(x: 872, y: 876, width: 14, height: 24),
-            alwaysHidden: CGRect(x: 886, y: 876, width: 14, height: 24)
+            control: CGRect(x: 872, y: 876, width: 20, height: 24),
+            alwaysHidden: CGRect(x: 900, y: 876, width: 14, height: 24)
         )
 
         for zone in VisibilityZone.allCases {
@@ -205,10 +191,6 @@ final class BarkeepTests: XCTestCase {
     func testDefaultProductRules() {
         let settings = BarkeepSettings()
         XCTAssertEqual(settings.iconStyle, .ellipsis)
-        XCTAssertTrue(settings.autoRehide)
-        XCTAssertEqual(settings.rehideDelay, 5)
-        XCTAssertFalse(settings.showOnHover)
-        XCTAssertFalse(settings.showOnScroll)
         XCTAssertFalse(settings.requireAuthentication)
         XCTAssertFalse(settings.reduceItemSpacing)
     }
@@ -233,7 +215,7 @@ final class BarkeepTests: XCTestCase {
             id: "com.apple.controlcenter|com.apple.menuextra.clock"
         )
         let zones: [String: VisibilityZone] = [
-            hidden.id: .hidden,
+            hidden.id: .alwaysHidden,
             alwaysHidden.id: .alwaysHidden,
             visible.id: .alwaysVisible,
             pinnedClock.id: .alwaysVisible,
@@ -259,9 +241,9 @@ final class BarkeepTests: XCTestCase {
             isEnabled: true
         )
 
-        let displayMatch = MenuBarPickerContents(items: [item], query: "connect") { _ in .hidden }
-        let ownerMatch = MenuBarPickerContents(items: [item], query: "cloud") { _ in .hidden }
-        let noMatch = MenuBarPickerContents(items: [item], query: "battery") { _ in .hidden }
+        let displayMatch = MenuBarPickerContents(items: [item], query: "connect") { _ in .alwaysHidden }
+        let ownerMatch = MenuBarPickerContents(items: [item], query: "cloud") { _ in .alwaysHidden }
+        let noMatch = MenuBarPickerContents(items: [item], query: "battery") { _ in .alwaysHidden }
 
         XCTAssertEqual(displayMatch.overflow, [item])
         XCTAssertEqual(ownerMatch.overflow, [item])
@@ -438,9 +420,9 @@ final class BarkeepTests: XCTestCase {
         var notifications = 0
         let subscription = store.objectWillChange.sink { notifications += 1 }
 
-        store.updateSettings { $0.showOnHover = true }
+        store.updateSettings { $0.requireAuthentication = true }
 
-        XCTAssertTrue(store.settings.showOnHover)
+        XCTAssertTrue(store.settings.requireAuthentication)
         XCTAssertGreaterThanOrEqual(notifications, 1)
         withExtendedLifetime(subscription) {}
     }
@@ -604,12 +586,11 @@ final class BarkeepTests: XCTestCase {
         XCTAssertEqual(OrderPlanner.rightAnchorMinX([b, a]), a.frame.maxX)
     }
 
-    func testShelfModeCoincidingBoundaries() {
-        // In overflow-shelf mode the Always hidden boundary doubles as the
-        // hidden boundary, leaving exactly two zones.
+    func testClosedBoundaryEdgeSplitsTwoZones() {
+        // The Always hidden boundary is the only divider. Its frame is the
+        // narrow left edge of the closed status item, leaving exactly two zones.
         let boundaries = BoundaryFrames(
             control: CGRect(x: 900, y: 876, width: 20, height: 24),
-            hidden: CGRect(x: 700, y: 876, width: 14, height: 24),
             alwaysHidden: CGRect(x: 700, y: 876, width: 14, height: 24)
         )
 
@@ -617,7 +598,6 @@ final class BarkeepTests: XCTestCase {
             boundaries.targetPoint(for: .alwaysVisible),
             CGPoint(x: 807, y: 888)
         )
-        XCTAssertNil(boundaries.targetPoint(for: .hidden))
         XCTAssertEqual(
             boundaries.targetPoint(for: .alwaysHidden),
             CGPoint(x: 682, y: 888)
@@ -637,10 +617,29 @@ final class BarkeepTests: XCTestCase {
         {"version":1,"settings":{"launchAtLogin":false,"showDockIcon":false,"iconStyle":"ellipsis","autoRehide":true,"rehideDelay":5,"hideOnAppChange":false,"showOnHover":false,"hoverDelay":1,"showOnScroll":false,"showOnMenuBarClick":true,"requireAuthentication":false,"showOnLowBattery":false,"lowBatteryLevel":20,"alwaysShowOnExternalDisplay":false,"useCustomAppearance":false,"appearanceOpacity":0.16,"appearanceCornerRadius":8,"appearanceBorder":false,"reduceItemSpacing":false,"itemSpacing":4,"itemPadding":4},"rules":{},"groups":[],"profiles":[]}
         """
         let document = try JSONDecoder().decode(BarkeepDocument.self, from: Data(old.utf8))
-        XCTAssertNil(document.settings.menuBarMode)
-        XCTAssertEqual(document.settings.mode, .overflowShelf)
+        XCTAssertEqual(document.settings.iconStyle, .ellipsis)
         XCTAssertNil(document.priorityOrder)
         XCTAssertNil(document.identityVersion)
+    }
+
+    func testClassicDocumentsMigrateToShelf() throws {
+        // A document saved while classic mode existed carries a mode value,
+        // reveal settings, and rules in the removed Hidden section. It must
+        // still load, with those rules treated as In the menu bar.
+        let old = """
+        {"version":1,"settings":{"iconStyle":"dot","menuBarMode":"classic","autoRehide":false,"rehideDelay":5,"hideOnAppChange":false,"showOnHover":true,"hoverDelay":1,"showOnScroll":false,"showOnMenuBarClick":true,"showOnLowBattery":false,"lowBatteryLevel":20,"alwaysShowOnExternalDisplay":false,"requireAuthentication":true,"launchAtLogin":false,"showDockIcon":false,"useCustomAppearance":false,"appearanceOpacity":0.16,"appearanceCornerRadius":8,"appearanceBorder":false,"reduceItemSpacing":false,"itemSpacing":4,"itemPadding":4},"rules":{"com.example.a|slot:0":{"id":"com.example.a|slot:0","displayName":"A","ownerName":"A","zone":"hidden"},"com.example.b|slot:0":{"id":"com.example.b|slot:0","displayName":"B","ownerName":"B","zone":"alwaysHidden"}},"groups":[],"profiles":[{"id":"6F9619FF-8B86-D011-B42D-00C04FC964FF","name":"Work","createdAt":"2026-01-01T00:00:00Z","settings":{"iconStyle":"ring","menuBarMode":"classic","requireAuthentication":false,"launchAtLogin":false,"showDockIcon":false,"useCustomAppearance":false,"appearanceOpacity":0.16,"appearanceCornerRadius":8,"appearanceBorder":false,"reduceItemSpacing":false,"itemSpacing":4,"itemPadding":4},"rules":{"com.example.c|slot:0":{"id":"com.example.c|slot:0","displayName":"C","ownerName":"C","zone":"hidden"}}}]}
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let document = try decoder.decode(BarkeepDocument.self, from: Data(old.utf8))
+        XCTAssertEqual(document.settings.iconStyle, .dot)
+        XCTAssertTrue(document.settings.requireAuthentication)
+        XCTAssertEqual(document.rules["com.example.a|slot:0"]?.zone, .alwaysVisible)
+        XCTAssertEqual(document.rules["com.example.b|slot:0"]?.zone, .alwaysHidden)
+        XCTAssertEqual(document.profiles.first?.rules["com.example.c|slot:0"]?.zone, .alwaysVisible)
+        XCTAssertThrowsError(
+            try decoder.decode(VisibilityZone.self, from: Data("\"somethingElse\"".utf8))
+        )
     }
 
     @MainActor

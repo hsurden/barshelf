@@ -38,11 +38,10 @@ apps or turn on tighter item spacing, then try again.
 
 Use these checks in order.
 
-1. Open all items with Option-click and make sure the item is visible.
-2. Select **Refresh** in the Items settings.
-3. Try the section menu on the item row instead of drag and drop.
-4. Turn on tighter item spacing when the menu bar has no safe space.
-5. Move the item by hand with Command-drag when macOS does not complete the move.
+1. Select **Refresh** in the Items settings and make sure the item is listed.
+2. Try the section menu on the item row instead of drag and drop.
+3. Turn on tighter item spacing when the menu bar has no safe space.
+4. Move the item by hand with Command-drag when macOS does not complete the move.
 
 Barkeep keeps the old saved section after a failed move.
 
@@ -57,14 +56,7 @@ Shelf membership is fixed for each opening. Close and reopen the shelf to take a
 snapshot. If an item is missing immediately after opening, use the full picker and report the app
 name; some apps do not expose a stable Accessibility item.
 
-## Hidden items appear again too soon
-
-Barkeep does not hide items while the pointer stays in the menu bar area or while a menu is open.
-The hide delay starts to apply after you move the pointer away.
-
-Open **Behavior** settings. Increase **Hide delay** or turn off **Hide items again**. Also check
-the click, scroll, hover, app-change, and external-display settings. More than one enabled trigger
-can change the current reveal state.
+## An overflow icon does not come out or does not return
 
 Overflow-shelf activation temporarily brings only the selected icon to the left edge of the visible
 icons, such as just left of Wi-Fi. Click the exposed icon to open its native menu. Overflow
@@ -84,7 +76,7 @@ configurations may behave differently.
 
 ## A keyboard shortcut does nothing
 
-Barkeep uses `Command-Backslash` to show or hide items in the physical bar and
+Barkeep uses `Command-Backslash` to open or close the overflow shelf and
 `Command-Shift-Space` to open the item picker.
 Another app can register the same global shortcut first. Quit the other app or remove its shortcut,
 then restart Barkeep.

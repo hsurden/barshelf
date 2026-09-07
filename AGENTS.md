@@ -6,15 +6,17 @@ binary update cannot overwrite custom behavior.
 
 ## Product rules
 
-- Every item belongs to **Always visible**, **Hidden**, or **Always hidden**.
-- Click opens the overflow-first item picker. Option-click reveals all items in the physical bar.
-  Right-click opens the management menu.
-- `Command-Backslash` toggles items in the physical bar. `Command-Shift-Space` opens the picker.
+- Every item belongs to **In the menu bar** or **Always hidden**. The classic hide-and-reveal
+  mode, its Hidden section, and its reveal triggers were removed on 2026-09-06; the overflow shelf
+  is the only behavior.
+- Click opens the overflow shelf. Option-click opens the searchable item picker. Right-click opens
+  the management menu.
+- `Command-Backslash` opens or closes the shelf. `Command-Shift-Space` opens the picker.
 - Only a direct item-section/reorder action or selected-item temporary access can post a
   Command-drag. An explicit end of temporary access (dots, Escape, Quit) can return that item.
 - A move must use fresh Accessibility data and must pass a second scan before state is saved.
 - Launch, wake, display events, app events, timers, and updates must never move an item.
-- Touch ID or Mac password protection applies to all reveal paths, including search and triggers.
+- Touch ID or Mac password protection applies to the shelf, the picker, and overflow access.
 - Barkeep uses no account, telemetry, cloud sync, or Screen Recording.
 - Saved settings, rules, and profiles stay under Application Support.
 - Update failure cannot block app launch or the menu bar engine.
@@ -31,7 +33,7 @@ Sources/Barkeep/StatusBar/       visibility boundaries and menu bar icons
 Sources/Barkeep/Accessibility/   scans, permission checks, and confirmed moves
 Sources/Barkeep/Permissions/     guided Accessibility setup
 Sources/Barkeep/Storage/         local versioned JSON state
-Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and update policy
+Sources/Barkeep/System/          hotkeys, login, spacing, and update policy
 Sources/Barkeep/UI/              settings and item-picker windows
 Tests/BarkeepTests/              unit tests
 scripts/                         build, install, DMG, and release entry points
@@ -53,22 +55,22 @@ and `dist` files are ignored. Do not commit them.
 
 ## App structure
 
-`AppCoordinator` is the integration point. It owns the status bar engine, scanner, mover, triggers,
-hotkeys, windows, and state store. Views call coordinator methods and observe coordinator or store
+`AppCoordinator` is the integration point. It owns the status bar engine, scanner, mover, hotkeys,
+windows, and state store. Views call coordinator methods and observe coordinator or store
 state. Do not let views post input or make raw Accessibility calls.
 
 Most app code is isolated to `@MainActor`. `AccessibilityScanner` and `ItemMoveService` each use one
 private serial queue for blocking Accessibility or Core Graphics work. Keep shared mutable state on
 its existing actor or queue.
 
-`StatusBarEngine` owns exactly three status items.
+`StatusBarEngine` owns exactly two status items.
 
 1. The Barkeep control item
-2. The Hidden boundary
-3. The Always hidden boundary
+2. The Always hidden boundary
 
-All reveal actions must go through `AppCoordinator.requestReveal(all:)`. This keeps authentication
-and auto-hide behavior consistent.
+Its state is `resting` (section closed, everything else inline) or `open`. Only a confirmed move
+sequence or a debug launch flag opens it, and it returns to rest on its own. The shelf, the picker,
+and overflow access all check `requireAuthentication` through the same `authenticate` path.
 
 ## Accessibility and move safety
 
@@ -76,7 +78,7 @@ Treat item frames as temporary evidence. Never save geometry or `AXUIElement` ob
 
 For Settings section/order moves, keep the item move sequence in this order.
 
-1. Open all sections.
+1. Open the Always hidden section.
 2. Scan the live menu bar.
 3. Match the selected item.
 4. Read current boundary frames.
@@ -85,7 +87,7 @@ For Settings section/order moves, keep the item move sequence in this order.
 7. Return the pointer to its earlier position.
 8. Scan again.
 9. Save only after the new section is confirmed.
-10. Restore the earlier reveal state.
+10. Restore the resting state.
 
 There can be only one active move. A failure must keep the earlier saved rule and show a useful
 message. Do not add background repair or pointer movement.
@@ -115,12 +117,11 @@ Profiles and imports currently load stored rules and settings only. They do not 
 Do not describe them as automatic layout restoration or add automatic moves without a new product
 decision and a confirmed, user-controlled flow.
 
-## Trigger lifecycle
+## Idle work
 
-`TriggerCenter.update(settings:)` stops existing timers, monitors, and observers before it creates
-the required set. Any new optional trigger must follow the same ownership rule.
-
-Idle work must stay near zero. Do not add a continuous Accessibility scan. Search can use its
+There is no `TriggerCenter` and no reveal trigger. Do not add hover, scroll, click, app-change,
+battery, or display triggers; nothing may open the Always hidden section except a direct user
+action. Idle work must stay near zero. Do not add a continuous Accessibility scan. Search can use its
 current snapshot and request one refresh.
 
 ## Current feature boundary

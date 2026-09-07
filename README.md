@@ -18,17 +18,16 @@ everything else one click away.
 
 ## Put every item in one clear section
 
-Barkeep splits the menu bar into three sections.
+Barkeep splits the menu bar into two sections.
 
 | Section | What Barkeep does |
 |---|---|
-| **Always visible** | These items stay in the menu bar. |
-| **Hidden** | These stay in the picker and can also be revealed in the physical bar. |
-| **Always hidden** | These stay in the picker without taking physical menu-bar space. |
+| **In the menu bar** | These items stay inline until macOS overflows them behind the notch. |
+| **Always hidden** | These stay in the shelf and picker without taking physical menu-bar space. |
 
-Open **Arrange Items** to see all three sections together. Drag an item to another section or
-use the menu on its row. Barkeep checks the real menu bar after each move. It saves the new
-section only when macOS completes the move.
+Open the **Items** tab in Settings to see both sections together. Drag to reorder the bar, or use
+the menu on an item's row to move it between sections. Barkeep checks the real menu bar after each
+move. It saves the new section only when macOS completes the move.
 
 The default Barkeep icon is a compact ellipsis. You can choose from eight monochrome symbols.
 
@@ -37,8 +36,8 @@ The default Barkeep icon is a compact ellipsis. You can choose from eight monoch
 - Click the Barkeep icon to open a stable shelf of overflowed and Always hidden items.
 - Click the shelf’s gear for **Settings**, followed by **Quit Barkeep HS**.
 - Type while the shelf is open, or Option-click the icon, to open the searchable full picker.
-- Right-click the icon for arrangement, physical reveal controls, and other management actions.
-- Press `Command-Backslash` to show or hide items.
+- Right-click the icon for the shelf, the picker, and Settings.
+- Press `Command-Backslash` to open or close the shelf.
 - Press `Command-Shift-Space` to open the item picker.
 
 Choose an overflow entry to temporarily put that app's real icon at the left edge of the visible
@@ -50,8 +49,8 @@ available. Saved sections and priority order do not change.
 If there is no room outside the notch or macOS refuses the move, Barkeep reports the failure and
 attempts a verified return. This uses undocumented window routing and can vary across macOS releases.
 
-Barkeep can hide items again after a delay. It can also reveal them when you click, scroll, or
-hover in the menu bar. Each optional trigger stops when you turn it off.
+There is no classic hide-and-reveal mode and no hover, scroll, or click trigger. Every item stays
+in the bar until macOS overflows it, and the shelf is the one place to reach the rest.
 The App section in Settings includes a Quit Barkeep HS button.
 
 ## Your menu bar data stays on your Mac
@@ -67,8 +66,8 @@ Accessibility access lets Barkeep list, open, and move menu bar items. Barkeep m
 scan before a move and moves items only after an explicit arrangement or temporary-access action. Launch, wake,
 display changes, and timers cannot move an item.
 
-Touch ID or the Mac password can protect every reveal path. Launch at Login is optional and uses
-the macOS login item service.
+Touch ID or the Mac password can protect the shelf, the picker, and overflow access. Launch at
+Login is optional and uses the macOS login item service.
 
 ## Install Barkeep
 
@@ -127,7 +126,7 @@ These are the main source areas.
 Sources/Barkeep/App/             app lifecycle and coordination
 Sources/Barkeep/StatusBar/       status items and visibility boundaries
 Sources/Barkeep/Accessibility/   item scanning and confirmed moves
-Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and update policy
+Sources/Barkeep/System/          hotkeys, login, spacing, and update policy
 Sources/Barkeep/UI/              settings, search, and permission views
 Tests/BarkeepTests/              unit tests for state and core rules
 scripts/                         build, install, DMG, and release commands
@@ -140,9 +139,9 @@ Read [AGENTS.md](AGENTS.md) before changing the app. The supporting docs cover t
 
 ## Current limits
 
-The current app includes the three visibility sections, safe item moves, the item picker, reveal
-triggers, Touch ID protection, profiles, backups, and tighter item spacing. This personal fork does
-not accept automatic upstream app updates; upstream changes are reviewed and merged as source.
+The current app includes the two visibility sections, safe item moves, the overflow shelf, the
+item picker, Touch ID protection, profiles, backups, and tighter item spacing. This personal fork
+does not accept automatic upstream app updates; upstream changes are reviewed and merged as source.
 
 A second menu bar, custom bar styling, low-battery rules, scripts, and network triggers are not
 part of the current app. Profiles save Barkeep's stored rules and settings. Loading a profile does

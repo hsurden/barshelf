@@ -5,22 +5,22 @@ product decision changes them.
 
 ## Every menu bar item belongs to one section
 
-Barkeep always uses the same three names and meanings.
+Barkeep always uses the same two names and meanings.
 
-1. **Always visible** items stay visible.
-2. **Hidden** items stay in the picker and can also appear through an explicit physical reveal.
-3. **Always hidden** items stay in the picker without consuming physical menu-bar space.
+1. **In the menu bar** items stay inline until macOS overflows them behind the notch.
+2. **Always hidden** items stay in the shelf and picker without consuming physical menu-bar space.
 
-The Items screen shows all three sections at the same time. A user can drag an item or use its
-section menu. Drag and drop is a fast option, but it is not the only way to arrange items.
+The Items screen shows both sections at the same time. The in-bar column reorders the real bar by
+drag; an item's row menu moves it between sections. There is no separate reveal-toggle section and
+no classic hide-and-reveal mode.
 
 ## Main controls stay predictable
 
-- In overflow-shelf mode, a click opens a stable shelf snapshot.
+- A click opens a stable shelf snapshot.
 - The overflow gear opens a menu below it: **Settings**, then **Quit Barkeep HS**.
-- In overflow-shelf mode, an Option-click opens the searchable item picker.
+- An Option-click opens the searchable item picker.
 - A right-click opens a short command menu.
-- `Command-Backslash` toggles the Hidden section.
+- `Command-Backslash` opens or closes the shelf.
 - `Command-Shift-Space` opens the item picker.
 
 The shelf includes both deliberately hidden items and items currently displaced by physical
@@ -34,7 +34,7 @@ Barkeep click requests a verified return to its original neighbors. There is no 
 Temporary moves never change saved rules or priority order. Window-addressed input avoids a visible
 pointer drag and also handles the return. If a return fails, Barkeep retains its return address in
 memory and offers another explicit click to retry. The picker supports filtering and links directly
-to arrangement. The right-click menu contains management and physical-reveal actions. Less common
+to arrangement. The right-click menu contains the shelf, the picker, and Settings. Less common
 settings stay in the settings window. The App section in Settings includes an explicit Quit Barkeep
 HS action.
 
@@ -64,26 +64,19 @@ short process.
 The app must explain why it needs the permission. It must not ask for Screen Recording to provide
 the core menu bar features.
 
-## Reveal settings start with quiet defaults
+## Settings start with quiet defaults
 
-These defaults keep idle work and surprise behavior low.
+These defaults keep idle work and surprise behavior low. There are no hover, scroll, click,
+app-change, battery, or display triggers: nothing opens the Always hidden section except a
+confirmed move sequence, and it closes again on its own shortly after.
 
 | Setting | Default |
 |---|---|
-| Click the Barkeep icon | Open item picker |
-| Hide items again | On, after 5 seconds |
-| Hide when the active app changes | Off |
-| Reveal on hover | Off |
-| Reveal on scroll | Off |
-| Reveal from any menu bar click | On |
-| Keep items open on an external display | Off |
+| Click the Barkeep icon | Open the overflow shelf |
 | Require Touch ID or the Mac password | Off |
 | Start at login | Off |
 | Show a Dock icon | Off |
 | Use tighter item spacing | Off |
-
-Optional triggers must have clear owners. Their timers, event monitors, and observers must stop
-when the user turns the related setting off.
 
 ## Icons stay small and native
 

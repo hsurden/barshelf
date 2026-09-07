@@ -8,11 +8,11 @@ global input, and macOS services. SwiftUI draws the settings, search, and permis
 ```text
 Sources/Barkeep/App/             lifecycle and AppCoordinator
 Sources/Barkeep/Models/          saved and runtime state types
-Sources/Barkeep/StatusBar/       three status items and icon rendering
+Sources/Barkeep/StatusBar/       two status items and icon rendering
 Sources/Barkeep/Accessibility/   permission checks, scans, and item moves
 Sources/Barkeep/Permissions/     guided Accessibility setup
 Sources/Barkeep/Storage/         versioned local JSON storage
-Sources/Barkeep/System/          hotkeys, triggers, login, spacing, and update policy
+Sources/Barkeep/System/          hotkeys, login, spacing, and update policy
 Sources/Barkeep/UI/              settings and search windows
 Tests/BarkeepTests/              unit tests
 scripts/                         build, install, DMG, and release tools
@@ -23,12 +23,11 @@ scripts/                         build, install, DMG, and release tools
 | Component | Job | Runs outside the main actor? | Can post input? |
 |---|---|---:|---:|
 | `AppCoordinator` | Connect user actions, state, windows, and services | No | No |
-| `StatusBarEngine` | Own the control item and two section boundaries | No | No |
+| `StatusBarEngine` | Own the control item and the Always hidden boundary | No | No |
 | `AccessibilityScanner` | Read and press current menu bar items | Yes, on one serial queue | Press only |
 | `ItemMoveService` | Validate and post one confirmed Command-drag | Yes, on one serial queue | Yes |
 | `PermissionAssistant` | Open and follow the Accessibility settings window | No | No |
 | `StateStore` | Load and save the versioned JSON document | No | No |
-| `TriggerCenter` | Own optional reveal and hide event sources | No | No |
 | `HotKeyCenter` | Register the two global keyboard shortcuts | No | No |
 | `MenuBarSpacingService` | Apply and restore macOS spacing preferences | No | No |
 | `UpdateService` | Disable upstream binary updates for this personal fork | No | No |
@@ -36,27 +35,29 @@ scripts/                         build, install, DMG, and release tools
 `AppCoordinator` is the only object that joins these parts. Views call coordinator methods. They
 do not scan the menu bar or post input themselves.
 
-## Visibility has three states
+## Visibility has two states
 
-`StatusBarEngine.State` has three values.
+`StatusBarEngine.State` has two values.
 
-| State | Hidden section | Always hidden section |
-|---|---|---|
-| `hidden` | Closed | Closed |
-| `revealed` | Open | Closed |
-| `revealedAll` | Open | Open |
+| State | Always hidden section |
+|---|---|
+| `resting` | Closed |
+| `open` | Open |
 
-The engine uses two large status item lengths as section boundaries. The control item stays to the
-right. macOS keeps each status item's preferred position through its autosave name.
+The engine uses one large status item length as the Always hidden boundary. Everything right of it
+stays inline until macOS overflows it. The control item stays to the right. macOS keeps each status
+item's preferred position through its autosave name. The section opens only during a confirmed move
+sequence or a debug launch flag and returns to rest shortly after; no timer, event, or trigger opens
+it.
 
-All clicks, hotkeys, triggers, picker actions, and menu commands call the coordinator. A normal
-control-item click opens the picker; Option-click and explicit reveal commands still use the shared
-authentication and auto-hide path.
+All clicks, hotkeys, picker actions, and menu commands call the coordinator. A normal control-item
+click opens the shelf; Option-click opens the picker. The shelf, the picker, and overflow access
+share one authentication path.
 
 ## A safe item move has one fixed flow
 
 1. The user selects a new section for one item.
-2. The coordinator opens both sections.
+2. The coordinator opens the Always hidden section.
 3. The scanner reads the live menu bar.
 4. The coordinator matches the selected item to the fresh result.
 5. The status bar engine gives the target point for the requested section.
@@ -64,7 +65,7 @@ authentication and auto-hide path.
 7. The service posts one Command-drag and returns the pointer to its old position.
 8. The scanner reads the live menu bar again.
 9. The store saves the rule only when the boundary frames confirm the new section.
-10. The coordinator restores the earlier reveal state.
+10. The coordinator restores the resting state.
 
 There can be only one move at a time. A failed validation or failed confirmation leaves the saved
 rule unchanged.
@@ -93,15 +94,6 @@ Shelf activation follows one serialized lifecycle: resting, shelf open, revealin
 item, manual interaction, and restoring. The selected item remains physically available without a
 timer, including after its native menu or popover closes. A global Escape monitor or another normal
 click on Barkeep explicitly ends the session and restores the hidden layout.
-
-`TriggerCenter` creates only the event sources required by enabled settings.
-
-- Hover uses a 10 Hz timer while hover reveal is on.
-- Click and scroll use one global event monitor when either action is on.
-- App-change hide uses one workspace observer.
-- External-display reveal uses one screen observer.
-
-Each settings update stops all old sources before it installs the new set.
 
 ## Local state uses one versioned document
 

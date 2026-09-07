@@ -2,39 +2,36 @@ import AppKit
 
 @MainActor
 final class StatusBarEngine: NSObject {
+    /// The Always hidden section is closed at rest, which keeps every other
+    /// item inline until macOS overflows it. It opens only for a confirmed
+    /// move sequence or a debug launch flag; nothing else changes it.
     enum State: String, Sendable {
-        case hidden
-        case revealed
-        case revealedAll
+        case resting
+        case open
     }
 
     var onPrimaryAction: ((NSEvent) -> Void)?
     var menuProvider: (() -> NSMenu)?
-    private(set) var state: State = .hidden
+    private(set) var state: State = .resting
 
     private let statusBar = NSStatusBar.system
     private let controlItem: NSStatusItem
-    private let hiddenBoundary: NSStatusItem
     private var alwaysHiddenBoundary: NSStatusItem
     private var iconStyle: BarkeepIconStyle = .dot
-    private(set) var mode: MenuBarMode = .classic
 
     private static let openBoundaryLength: CGFloat = 14
     private static let closedBoundaryLength: CGFloat = 10_000
     private static let controlAutosaveName = "Barkeep.Control.v3"
-    private static let hiddenBoundaryAutosaveName = "Barkeep.HiddenBoundary.v3"
     private static let alwaysHiddenBoundaryAutosaveName = "Barkeep.AlwaysHiddenBoundary.v3"
 
     override init() {
         Self.seedInitialPositions()
 
         controlItem = statusBar.statusItem(withLength: NSStatusItem.squareLength)
-        hiddenBoundary = statusBar.statusItem(withLength: Self.openBoundaryLength)
         alwaysHiddenBoundary = statusBar.statusItem(withLength: Self.openBoundaryLength)
         super.init()
 
-        configure(controlItem, name: Self.controlAutosaveName, label: "Open menu bar item picker")
-        configure(hiddenBoundary, name: Self.hiddenBoundaryAutosaveName, label: "Hidden items boundary")
+        configure(controlItem, name: Self.controlAutosaveName, label: "Open overflow shelf")
         configure(
             alwaysHiddenBoundary,
             name: Self.alwaysHiddenBoundaryAutosaveName,
@@ -44,53 +41,23 @@ final class StatusBarEngine: NSObject {
         controlItem.button?.target = self
         controlItem.button?.action = #selector(handleControlClick(_:))
         controlItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        controlItem.button?.toolTip = "Open menu bar item picker"
+        controlItem.button?.toolTip = "Open overflow shelf"
 
-        hiddenBoundary.button?.image = BarkeepIconFactory.dividerImage()
-        hiddenBoundary.button?.alphaValue = 0.7
-        alwaysHiddenBoundary.button?.image = BarkeepIconFactory.dividerImage()
         alwaysHiddenBoundary.button?.alphaValue = 0.5
-        setState(.hidden)
+        setState(.resting)
     }
 
     private static func seedInitialPositions() {
         let defaults = UserDefaults.standard
-        let positions: [(name: String, position: Double)] = [
-            (controlAutosaveName, 0),
-            (hiddenBoundaryAutosaveName, 1),
-        ]
-
-        for entry in positions {
-            let key = "NSStatusItem Preferred Position \(entry.name)"
-            if defaults.object(forKey: key) == nil {
-                defaults.set(entry.position, forKey: key)
-            }
+        let key = "NSStatusItem Preferred Position \(controlAutosaveName)"
+        if defaults.object(forKey: key) == nil {
+            defaults.set(0, forKey: key)
         }
     }
 
     func setIconStyle(_ style: BarkeepIconStyle) {
         iconStyle = style
         updateControlImage()
-    }
-
-    /// In overflow-shelf mode there is no reveal-toggle "Hidden" section, so
-    /// its boundary leaves the menu bar. The Always hidden boundary stays and
-    /// keeps working: shelf mode is "everything visible until it overflows,
-    /// plus one Always hidden bucket". The resting state is .revealed, which
-    /// keeps the Always hidden section closed and everything else inline.
-    func setMode(_ newMode: MenuBarMode) {
-        guard newMode != mode else { return }
-        mode = newMode
-        switch newMode {
-        case .overflowShelf:
-            hiddenBoundary.isVisible = false
-            alwaysHiddenBoundary.isVisible = true
-            setState(.revealed)
-        case .classic:
-            hiddenBoundary.isVisible = true
-            alwaysHiddenBoundary.isVisible = true
-            setState(.hidden)
-        }
     }
 
     /// The control item's window frame in AppKit screen coordinates, used to
@@ -128,54 +95,20 @@ final class StatusBarEngine: NSObject {
             name: Self.alwaysHiddenBoundaryAutosaveName,
             label: "Always hidden items boundary"
         )
-        alwaysHiddenBoundary.button?.image = BarkeepIconFactory.dividerImage()
         alwaysHiddenBoundary.button?.alphaValue = 0.5
         setState(state)
-    }
-
-    func toggleHidden() {
-        setState(state == .hidden ? .revealed : .hidden)
-    }
-
-    func toggleAll() {
-        setState(state == .revealedAll ? .hidden : .revealedAll)
-    }
-
-    func revealHidden() {
-        setState(.revealed)
-    }
-
-    func revealAll() {
-        setState(.revealedAll)
-    }
-
-    func hide() {
-        setState(.hidden)
     }
 
     func setState(_ newState: State) {
         state = newState
         switch newState {
-        case .hidden:
-            hiddenBoundary.length = Self.closedBoundaryLength
-            alwaysHiddenBoundary.length = Self.openBoundaryLength
-        case .revealed:
-            hiddenBoundary.length = Self.closedBoundaryLength
+        case .resting:
             alwaysHiddenBoundary.length = Self.closedBoundaryLength
-            hiddenBoundary.length = Self.openBoundaryLength
-        case .revealedAll:
-            hiddenBoundary.length = Self.closedBoundaryLength
+        case .open:
             alwaysHiddenBoundary.length = Self.openBoundaryLength
-            hiddenBoundary.length = Self.openBoundaryLength
         }
-        hiddenBoundary.button?.image = newState == .hidden ? nil : BarkeepIconFactory.dividerImage()
-        if mode == .overflowShelf {
-            // No divider glyph in shelf mode, even during a transient reveal.
-            alwaysHiddenBoundary.button?.image = nil
-        } else {
-            alwaysHiddenBoundary.button?.image =
-                newState == .revealed ? nil : BarkeepIconFactory.dividerImage()
-        }
+        // The boundary never draws a divider glyph, even while open.
+        alwaysHiddenBoundary.button?.image = nil
         updateControlImage()
     }
 
@@ -186,23 +119,15 @@ final class StatusBarEngine: NSObject {
               alwaysHidden.width > 0 else {
             return nil
         }
-        if mode == .overflowShelf {
-            // Shelf mode has no reveal-toggle section: the Always hidden
-            // boundary doubles as the hidden boundary, giving two zones. The
-            // closed boundary is thousands of points wide, so its LEFT edge is
-            // the meaningful divider; a midpoint would misclassify items.
-            let edge = CGRect(
-                x: alwaysHidden.minX,
-                y: alwaysHidden.minY,
-                width: min(alwaysHidden.width, 30),
-                height: alwaysHidden.height
-            )
-            return BoundaryFrames(control: control, hidden: edge, alwaysHidden: edge)
-        }
-        guard let hidden = hiddenBoundary.button?.window?.frame, hidden.width > 0 else {
-            return nil
-        }
-        return BoundaryFrames(control: control, hidden: hidden, alwaysHidden: alwaysHidden)
+        // The closed boundary is thousands of points wide, so its LEFT edge
+        // is the meaningful divider; a midpoint would misclassify items.
+        let edge = CGRect(
+            x: alwaysHidden.minX,
+            y: alwaysHidden.minY,
+            width: min(alwaysHidden.width, 30),
+            height: alwaysHidden.height
+        )
+        return BoundaryFrames(control: control, alwaysHidden: edge)
     }
 
     func targetPoint(for zone: VisibilityZone) -> CGPoint? {
@@ -216,8 +141,8 @@ final class StatusBarEngine: NSObject {
     }
 
     private func updateControlImage() {
-        controlItem.button?.image = BarkeepIconFactory.image(for: iconStyle, expanded: state != .hidden)
-        controlItem.button?.setAccessibilityValue(state == .hidden ? "Hidden" : "Shown")
+        controlItem.button?.image = BarkeepIconFactory.image(for: iconStyle, expanded: state == .open)
+        controlItem.button?.setAccessibilityValue(state == .open ? "Open" : "Closed")
     }
 
     @objc private func handleControlClick(_ sender: NSStatusBarButton) {
