@@ -130,8 +130,30 @@ private struct ZoneColumn: View {
         coordinator.itemsForSettings(in: zone)
     }
 
+    @State private var targetedRowID: String?
+
     /// The in-bar column reorders the real bar by drag.
     private var isReorderColumn: Bool { zone == .alwaysVisible }
+
+    /// A drop on an in-bar row takes that row's place. A hidden item dropped
+    /// there moves into the bar, the same as a drop on the column.
+    private func drop(_ identifiers: [String], onto target: MenuBarItemSnapshot) -> Bool {
+        guard !coordinator.isScanning,
+              !coordinator.isApplyingOrder,
+              coordinator.movingItemID == nil,
+              let id = identifiers.first, id != target.id,
+              let item = coordinator.items.first(where: { $0.id == id }) else {
+            return false
+        }
+        selectedID = item.id
+        if coordinator.isOutOfBar(item) {
+            Task { await coordinator.moveItem(item, to: .alwaysVisible) }
+        } else {
+            guard let rank = zoneItems.firstIndex(where: { $0.id == target.id }) else { return false }
+            Task { await coordinator.reorderItem(item, toRank: rank) }
+        }
+        return true
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -149,38 +171,37 @@ private struct ZoneColumn: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(height: 34, alignment: .topLeading)
             Divider()
-            if isReorderColumn {
-                List {
+            ScrollView {
+                LazyVStack(spacing: 5) {
                     ForEach(zoneItems) { item in
-                        ItemRow(item: item, coordinator: coordinator, selectedID: $selectedID)
-                            .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
-                            .listRowSeparator(.hidden)
-                            .listRowBackground(Color.clear)
-                    }
-                    .onMove { offsets, destination in
-                        guard let sourceOffset = offsets.first else { return }
-                        let moved = zoneItems[sourceOffset]
-                        var reordered = zoneItems
-                        reordered.move(fromOffsets: offsets, toOffset: destination)
-                        guard let rank = reordered.firstIndex(of: moved),
-                              rank != sourceOffset else { return }
-                        Task { await coordinator.reorderItem(moved, toRank: rank) }
-                    }
-                }
-                .listStyle(.plain)
-                .scrollContentBackground(.hidden)
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 5) {
-                        ForEach(zoneItems) { item in
+                        if isReorderColumn {
+                            // Rows are drag sources, which suppresses List's
+                            // own move gesture, so each row is a drop target.
+                            ItemRow(item: item, coordinator: coordinator, selectedID: $selectedID)
+                                .overlay {
+                                    if targetedRowID == item.id {
+                                        RoundedRectangle(cornerRadius: 7)
+                                            .stroke(Color.accentColor, lineWidth: 2)
+                                    }
+                                }
+                                .dropDestination(for: String.self) { identifiers, _ in
+                                    drop(identifiers, onto: item)
+                                } isTargeted: { targeted in
+                                    if targeted {
+                                        targetedRowID = item.id
+                                    } else if targetedRowID == item.id {
+                                        targetedRowID = nil
+                                    }
+                                }
+                        } else {
                             ItemRow(item: item, coordinator: coordinator, selectedID: $selectedID)
                         }
-                        if zoneItems.isEmpty {
-                            Text("Nothing is hidden")
-                                .foregroundStyle(.tertiary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 28)
-                        }
+                    }
+                    if zoneItems.isEmpty && !isReorderColumn {
+                        Text("Nothing is hidden")
+                            .foregroundStyle(.tertiary)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 28)
                     }
                 }
             }
