@@ -241,9 +241,18 @@ extension MenuBarItemSnapshot {
     }
 }
 
-struct BoundaryFrames: Sendable {
+struct BoundaryFrames: Sendable, Equatable {
     let control: CGRect
     let alwaysHidden: CGRect
+
+    func confirms(_ itemFrame: CGRect, in requestedZone: VisibilityZone,
+                  screens: [ScreenGeometry]) -> Bool {
+        guard zone(for: itemFrame) == requestedZone else { return false }
+        // A status item can be on the visible side of the divider while still
+        // hidden behind the notch. Settings promises a physically visible item.
+        return requestedZone == .alwaysHidden ||
+            TemporaryItemPlacement.isDrawable(itemFrame, screens: screens)
+    }
 
     func zone(for itemFrame: CGRect) -> VisibilityZone {
         if itemFrame.midX > control.midX || itemFrame.midX > alwaysHidden.midX {
@@ -307,6 +316,8 @@ enum BarShelfError: LocalizedError {
     case itemOccluded
     case menuBarFull
     case boundariesUnavailable
+    case menuBarItemUnavailable
+    case returnOrderNotConfirmed
     case invalidGeometry
     case moveNotConfirmed
     case authenticationFailed
@@ -319,6 +330,8 @@ enum BarShelfError: LocalizedError {
         case .itemPinnedByMacOS: "macOS keeps this item on the right side. BarShelf cannot move it."
         case .itemOccluded: "macOS hides this item behind the notch, so BarShelf cannot grab it to move it. Quit or rearrange other menu bar apps to free space, then apply the order again."
         case .menuBarFull: "The menu bar is full, and macOS hides this spot behind the notch. Close some menu bar apps or turn on tighter spacing, then try again."
+        case .menuBarItemUnavailable: "macOS is not providing a usable menu-bar icon for this app. Open System Settings → Menu Bar → Allow in the Menu Bar and turn the app on, then click Refresh in BarShelf and try again. This is separate from Accessibility and BarShelf’s Always hidden section. If it is already on, check the app’s own menu-bar icon setting."
+        case .returnOrderNotConfirmed: "The icon is back in overflow, but BarShelf could not restore its exact position among the original neighboring icons. Keeping this position does not move it again."
         case .boundariesUnavailable: "BarShelf could not find its section boundaries."
         case .invalidGeometry: "The current menu bar layout is not safe for this move."
         case .moveNotConfirmed: "macOS did not complete the move. BarShelf kept the old section."

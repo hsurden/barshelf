@@ -65,10 +65,34 @@ struct TemporaryItemPlacement {
         }.min { $0.frame.minX < $1.frame.minX }
     }
 
+    static func accessAnchor(for item: Anchor, in anchors: [Anchor],
+                             screens: [ScreenGeometry]) -> Anchor? {
+        let leading = leadingVisibleAnchor(in: anchors, excluding: item.id, screens: screens)
+        let control = anchors.first { $0.id == controlID }
+        return [leading, control].compactMap { $0 }.first { anchor in
+            let points = WindowMoveEdge.left.movePoints(source: item.frame, destination: anchor.frame)
+            return isDrawable(CGRect(origin: points.end, size: item.frame.size), screens: screens)
+        }
+    }
+
     static func isImmediatelyBefore(item: CGRect, neighbor: CGRect, otherItems: [CGRect]) -> Bool {
         item.width > 0 && item.maxX <= neighbor.minX + 2 &&
         neighbor.minX - item.maxX <= 12 &&
         !otherItems.contains { $0.midX > item.midX && $0.midX < neighbor.midX }
+    }
+
+    static func isInOverflow(_ frame: CGRect, reference: CGRect, screens: [ScreenGeometry]) -> Bool {
+        frame.width > 0 && frame.height > 0 &&
+        isOnMenuBarRow(frame, reference: reference) && !isDrawable(frame, screens: screens)
+    }
+
+    static func isAvailableForAccess(_ frame: CGRect, reference: CGRect) -> Bool {
+        frame.minX.isFinite && frame.minY.isFinite && frame.width.isFinite && frame.height.isFinite &&
+        frame.width > 0 && frame.height > 0 && isOnMenuBarRow(frame, reference: reference)
+    }
+
+    static func isOnMenuBarRow(_ frame: CGRect, reference: CGRect) -> Bool {
+        abs(frame.midY - reference.midY) < 3
     }
 
     /// Require the whole icon to clear the notch, not just its center.

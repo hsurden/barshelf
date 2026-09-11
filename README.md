@@ -32,9 +32,10 @@ https://github.com/iannuttall/barkeep
 
 ## Use BarShelf without leaving your current app
 
-- Click the BarShelf icon to open a stable shelf of overflowed and Always hidden items.
+- Click the BarShelf icon to open a stable shelf of overflowed and Always hidden items. Selecting an entry brings its real icon to a reachable position; click that icon to open its native controls. If returning it fails, choose Retry Return, Leave Icon Here, or Quit BarShelf.
 - Click the shelf’s gear for **Settings**, followed by **Quit BarShelf**.
 - Type while the shelf is open, or Option-click the icon, to open the searchable full picker.
+- Open the already-running BarShelf app again in Finder or Spotlight to show Settings, then use **Open Shelf** to reach the overflow controls. Temporary access uses a position beside the dots if the left-edge slot is blocked by the notch; **Return Icon** in Settings puts it back.
 
 
 ## Your menu bar data stays on your Mac
@@ -133,3 +134,13 @@ Read [AGENTS.md](AGENTS.md) before changing the app. The supporting docs cover t
 ## License
 
 BarShelf uses the [MIT License](LICENSE).
+
+If an app is unavailable in the shelf, check **System Settings → Menu Bar → Allow in the Menu Bar**
+and refresh BarShelf. An icon that is back in overflow but in the wrong order has a separate warning
+with **Keep Current Order**; accepting it does not move the icon again.
+
+The shelf and searchable picker omit icons that macOS currently reports off the menu-bar row
+or with invalid geometry. Real hidden icons and icons behind the notch remain available.
+Unavailable items remain in Settings; enable them in macOS or their own app, then refresh
+BarShelf (or reopen the shelf) to include them again. Availability is checked again at selection
+time, so an item disabled after the shelf opened can still show recovery guidance.

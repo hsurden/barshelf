@@ -43,14 +43,16 @@ struct MenuBarWindow: Equatable, Sendable {
 enum WindowMoveEdge: Sendable {
     case left, right
 
-    /// Removing an item shifts the insertion edge by its width when moving right.
+    /// Account for the selected window's width in both directions. A left-edge
+    /// return must not release beyond a narrower neighbor's far edge.
     /// The down is window-addressed at that edge, so no cursor drag path is needed.
     func movePoints(source: CGRect, destination: CGRect) -> (start: CGPoint, end: CGPoint) {
         let boundary = self == .left ? destination.minX : destination.maxX
         let movingRight = self == .left ? source.maxX <= boundary : source.minX <= boundary
         let startX = movingRight ? boundary : boundary + (self == .left ? -1 : 1)
+        let returnOffset = self == .left ? min(source.width, destination.width) : source.width
         return (CGPoint(x: startX, y: destination.minY),
-                CGPoint(x: movingRight ? boundary - source.width : boundary, y: destination.minY))
+                CGPoint(x: movingRight ? boundary - source.width : boundary + returnOffset, y: destination.minY))
     }
 
     func point(on frame: CGRect) -> CGPoint {

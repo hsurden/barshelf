@@ -45,10 +45,26 @@ final class MenuBarWindowTests: XCTestCase {
         XCTAssertEqual(outward.end, CGPoint(x: 1264, y: 0))
         let returned = WindowMoveEdge.left.movePoints(source: visible, destination: hosted.frame)
         XCTAssertEqual(returned.start, CGPoint(x: -4016, y: 0))
-        XCTAssertEqual(returned.end, CGPoint(x: -4015, y: 0))
+        XCTAssertEqual(returned.end, CGPoint(x: -3990, y: 0))
         let right = WindowMoveEdge.right.movePoints(source: visible, destination: hosted.frame)
         XCTAssertEqual(right.start, CGPoint(x: -3976, y: 0))
-        XCTAssertEqual(right.end, CGPoint(x: -3977, y: 0))
+        XCTAssertEqual(right.end, CGPoint(x: -3952, y: 0))
+    }
+
+    func testWideWeatherReturnDoesNotOvershootNarrowNeighbor() {
+        // Live failure: Weather (66pt) was released past Claude (40pt)
+        // and landed to its right instead of between the saved neighbors.
+        let weather = CGRect(x: 1431, y: 0, width: 66, height: 33)
+        for width: CGFloat in [38, 40] {
+            let neighbor = CGRect(x: -4603, y: 0, width: width, height: 33)
+            let points = WindowMoveEdge.left.movePoints(source: weather, destination: neighbor)
+            XCTAssertEqual(points.end.x, neighbor.maxX)
+            XCTAssertLessThanOrEqual(points.end.x, neighbor.maxX)
+        }
+        // The wide closed boundary still uses the selected icon's width.
+        let divider = CGRect(x: -4387, y: 0, width: 5016, height: 33)
+        XCTAssertEqual(WindowMoveEdge.left.movePoints(source: weather, destination: divider).end.x,
+                       divider.minX + weather.width)
     }
 
 }

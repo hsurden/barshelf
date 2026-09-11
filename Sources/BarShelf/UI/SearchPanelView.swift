@@ -9,7 +9,7 @@ struct SearchPanelView: View {
     private var contents: MenuBarPickerContents {
         // The first section is the set of items macOS pushed behind the notch
         // or off screen, plus anything saved as Always hidden.
-        MenuBarPickerContents(items: coordinator.items, query: query) {
+        MenuBarPickerContents(items: coordinator.pickerItems, query: query) {
             coordinator.isOverflowed($0) ? .alwaysHidden : .alwaysVisible
         }
     }

@@ -65,6 +65,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         coordinator.prepareForTermination() ? .terminateNow : .terminateCancel
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // An explicit reopen (for example, opening the running app in Finder)
+        // must provide a window even when the menu bar control is unreachable.
+        // Reuse this instance's coordinator; launch and login remain quiet.
+        coordinator.showSettings()
+        return false
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
     }

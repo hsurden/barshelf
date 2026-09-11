@@ -53,6 +53,14 @@ final class AppCoordinator: NSObject, ObservableObject {
     private var interactionDidEnd = false
     private var quitAfterInteraction = false
     private var temporaryPlacement: TemporaryItemPlacement?
+    private var temporaryAccessAnchorID: String?
+
+    var canReturnTemporaryItem: Bool { temporaryPlacement != nil && movingItemID == nil }
+
+    func returnTemporaryItem() {
+        guard canReturnTemporaryItem else { return }
+        finishInteractionSession()
+    }
     private var authenticationSucceeded = false
     private var isAuthenticating = false
     private var authenticationContext: LAContext?
@@ -234,10 +242,20 @@ final class AppCoordinator: NSObject, ObservableObject {
             intentZone(for: $0) == .alwaysHidden ? $0.id : nil
         })
         return ShelfSessionModel.items(
-            from: shelfInventory.items,
+            from: availableAccessItems(shelfInventory.items),
             overflowIDs: shelfInventory.overflowIDs,
             intentionallyHiddenIDs: hiddenIDs
         )
+    }
+
+    var pickerItems: [MenuBarItemSnapshot] { availableAccessItems(items) }
+
+    private func availableAccessItems(_ candidates: [MenuBarItemSnapshot]) -> [MenuBarItemSnapshot] {
+        // Keep uncertainty visible rather than hiding the entire inventory if
+        // BarShelf's own geometry is temporarily unavailable.
+        guard let anchors = try? placementAnchors(candidates) else { return candidates }
+        let availableIDs = Set(anchors.map(\.id))
+        return candidates.filter { availableIDs.contains($0.id) }
     }
 
     /// The shelf's chevron, or typing while the shelf is open, expands into the
@@ -333,7 +351,6 @@ final class AppCoordinator: NSObject, ObservableObject {
                 throw BarShelfError.invalidGeometry
             }
             let reveal = try await waitForRevealedItem(matching: item, screens: screens)
-            let freshItems = reveal.items
             let freshItem = reveal.item
             moveLog.notice("""
             move \(item.id, privacy: .public) -> \(zone.title, privacy: .public) \
@@ -374,6 +391,24 @@ final class AppCoordinator: NSObject, ObservableObject {
             var dragTarget = quartzTarget
             var sourceOccluded = screens.contains(where: { $0.hidesMenuBarPoint(dragSource) })
             var targetOccluded = screens.contains(where: { $0.hidesMenuBarPoint(dragTarget) })
+            if zone == .alwaysVisible && sourceOccluded {
+                // Ordinary pointer hit-testing cannot grab through the notch.
+                // Address the live window and insert beside our reachable
+                // control, then verify physical visibility before saving.
+                let anchors = try placementAnchors(reveal.items)
+                guard let control = anchors.first(where: {
+                    $0.id == TemporaryItemPlacement.controlID
+                }) else { throw BarShelfError.boundariesUnavailable }
+                try await moveTemporaryItem(
+                    freshItem, beside: control, edge: .left,
+                    scan: reveal.items, requireDrawable: true
+                )
+                guard let confirmation = await confirmMove(item, to: zone) else {
+                    throw BarShelfError.moveNotConfirmed
+                }
+                applyConfirmedMove(confirmation, to: zone)
+                return
+            }
             if sourceOccluded || targetOccluded,
                let notched = screens.first(where: { $0.statusAreaMinX != nil }),
                let roomy = screens.first(where: { $0.statusAreaMinX == nil }) {
@@ -447,14 +482,6 @@ final class AppCoordinator: NSObject, ObservableObject {
                 }
                 try await hideOnFullBar(item, screens: screens, originalPointer: originalPointer)
             } else {
-                if let boundaries = statusBar.boundaryFrames(),
-                   boundaries.zone(for: freshItem.frame) == zone {
-                    applyConfirmedMove(
-                        MoveConfirmation(items: freshItems, item: freshItem, boundaries: boundaries),
-                        to: zone
-                    )
-                    return
-                }
                 try await mover.move(
                     from: quartzSourceFrame,
                     to: dragTarget,
@@ -596,16 +623,17 @@ final class AppCoordinator: NSObject, ObservableObject {
             }
             if temporaryPlacement != nil {
                 guard TemporaryItemPlacement.isDrawable(verified.frame, screens: screenGeometries()),
-                      let leading = TemporaryItemPlacement.leadingVisibleAnchor(
-                          in: try placementAnchors(latest), excluding: verified.id, screens: screenGeometries()
-                      ), TemporaryItemPlacement.isImmediatelyBefore(
+                      let leading = try placementAnchors(latest).first(where: {
+                          $0.id == temporaryAccessAnchorID
+                      }), TemporaryItemPlacement.isImmediatelyBefore(
                           item: verified.frame, neighbor: leading.frame,
                           otherItems: latest.filter { $0.id != verified.id }.map(\.frame)
                       ) else { throw BarShelfError.moveNotConfirmed }
             }
             beginInteractionSession(itemID: target.id)
-            // Overflow selection only exposes the real icon. The user opens
-            // its native menu with a normal click when ready.
+            // Overflow access exposes the real control for the user to click,
+            // following the original single-item interaction. Do not open a
+            // native menu while arranging a temporary status item.
             if !quitAfterInteraction && temporaryPlacement == nil {
                 let result = await scanner.press(itemID: target.id)
                 // An AX timeout is ambiguous: opening a native menu may outlive
@@ -628,20 +656,44 @@ final class AppCoordinator: NSObject, ObservableObject {
             do {
                 try await returnBorrowedItem(item)
                 temporaryPlacement = nil
+                temporaryAccessAnchorID = nil
             } catch {
                 statusBar.setState(.resting)
-                message = "Could not return \(item.displayName) to overflow: \(error.localizedDescription) Click the three dots to retry."
-                // A failed Quit must wait for another explicit action too.
-                quitAfterInteraction = false
-                showActivationError()
+                moveLog.error("Return failed for \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                let recovery = returnFailureChoice(itemName: item.displayName, error: error)
                 message = nil
-                beginInteractionSession(itemID: item.id)
-                await waitForInteractionSessionToEnd()
+                quitAfterInteraction = recovery == .alertThirdButtonReturn
+                if recovery == .alertFirstButtonReturn {
+                    // Only this explicit button authorizes another move.
+                    continue
+                }
+                // Leave the live icon where macOS put it. Abandon only the
+                // in-memory return address, never claim a confirmed return.
+                temporaryPlacement = nil
+                temporaryAccessAnchorID = nil
             }
         }
         await restoreAfterActivation()
         if message != nil { showActivationError() }
         if quitAfterInteraction { NSApp.terminate(nil) }
+    }
+
+    private func returnFailureChoice(itemName: String, error: Error) -> NSApplication.ModalResponse {
+        let alert = NSAlert()
+        let backInOverflow: Bool
+        if case BarShelfError.returnOrderNotConfirmed = error { backInOverflow = true }
+        else { backInOverflow = false }
+        alert.messageText = backInOverflow
+            ? "\(itemName) is back in overflow"
+            : "Could not confirm the return of \(itemName)"
+        alert.informativeText = "\(error.localizedDescription) Retry the original position, keep the current position and continue using BarShelf, or quit without another move."
+        alert.addButton(withTitle: "Retry Return")
+        alert.addButton(withTitle: backInOverflow ? "Keep Current Order" : "Leave Icon Here")
+        alert.addButton(withTitle: "Quit BarShelf")
+        // Dismissing the error must not accidentally post another drag.
+        alert.buttons[0].keyEquivalent = ""
+        alert.buttons[1].keyEquivalent = "\r"
+        return alert.runModal()
     }
 
     private func showActivationError() {
@@ -657,40 +709,61 @@ final class AppCoordinator: NSObject, ObservableObject {
     private func borrowItem(_ item: MenuBarItemSnapshot) async throws -> MenuBarItemSnapshot {
         guard !item.isPinnedByMacOS else { throw BarShelfError.itemPinnedByMacOS }
         movingItemID = item.id
-        defer { movingItemID = nil; statusBar.setState(.resting) }
-        // Keep the hidden section closed; source hit-testing is unnecessary.
+        defer {
+            movingItemID = nil
+            statusBar.setState(.resting)
+        }
+        // Window-directed access does not need source hit-testing. Keep the
+        // hidden group closed while moving only the selected item.
         let scan = await scanner.scan(apps: runningApps())
-        guard let fresh = scan.first(where: { matches($0, item) }) else { throw BarShelfError.itemNotFound }
+        guard let fresh = scan.first(where: { matches($0, item) }) else {
+            throw BarShelfError.itemNotFound
+        }
         let anchors = try placementAnchors(scan)
+        // System-disabled items can remain discoverable on a sentinel row.
+        // They are not missing BarShelf's own divider; no move can start yet.
+        guard anchors.contains(where: { $0.id == fresh.id }) else {
+            throw BarShelfError.menuBarItemUnavailable
+        }
         guard let address = TemporaryItemPlacement(itemID: fresh.id, anchors: anchors),
               let control = anchors.first(where: { $0.id == TemporaryItemPlacement.controlID }),
               let divider = anchors.first(where: { $0.id == TemporaryItemPlacement.boundaryID }),
-              divider.frame.maxX <= control.frame.minX,
-              let leading = TemporaryItemPlacement.leadingVisibleAnchor(
-                  in: anchors, excluding: fresh.id, screens: screenGeometries()
-              ) else {
-            throw BarShelfError.boundariesUnavailable
+              divider.frame.maxX <= control.frame.minX else {
+                throw BarShelfError.boundariesUnavailable
         }
-        let expected = CGRect(x: leading.frame.minX - fresh.frame.width,
-                              y: leading.frame.minY, width: fresh.frame.width,
-                              height: leading.frame.height)
-        guard TemporaryItemPlacement.isDrawable(expected, screens: screenGeometries()) else {
+        guard let leading = TemporaryItemPlacement.accessAnchor(
+            for: .init(id: fresh.id, frame: fresh.frame), in: anchors, screens: screenGeometries()
+        ) else {
             throw BarShelfError.menuBarFull
         }
         // Keep the return address before posting: even an unconfirmed drag may
         // have moved the icon. Failure must attempt a verified return.
+        moveLog.notice("Borrow address: item=\(address.itemID, privacy: .public) left=\(address.leftID ?? "nil", privacy: .public) right=\(address.rightID ?? "nil", privacy: .public)")
         temporaryPlacement = address
+        temporaryAccessAnchorID = leading.id
         var deliveryError: Error?
-        do { try await moveTemporaryItem(fresh, beside: leading, edge: .left, scan: scan, requireDrawable: true) }
+        do {
+            do {
+                try await moveTemporaryItem(fresh, beside: leading, edge: .left,
+                                            scan: scan, requireDrawable: true)
+            } catch BarShelfError.menuBarFull where leading.id != control.id {
+                // AX describes the button; the surrounding native window can
+                // be wider. This error occurs before any input is posted, so
+                // retry the control slot using the mover's full-window check.
+                temporaryAccessAnchorID = control.id
+                try await moveTemporaryItem(fresh, beside: control, edge: .left,
+                                            scan: scan, requireDrawable: true)
+            }
+        }
         catch { deliveryError = error }
         // The section stays closed throughout; verify before opening the menu.
         for _ in 0..<10 {
             try? await Task.sleep(for: .milliseconds(120))
             let scan = await scanner.scan(apps: runningApps())
             guard let fresh = scan.first(where: { matches($0, item) }),
-                  let leading = TemporaryItemPlacement.leadingVisibleAnchor(
-                      in: try placementAnchors(scan), excluding: fresh.id, screens: screenGeometries()
-                  ),
+                  let leading = try placementAnchors(scan).first(where: {
+                      $0.id == temporaryAccessAnchorID
+                  }),
                   TemporaryItemPlacement.isDrawable(fresh.frame, screens: screenGeometries()),
                   TemporaryItemPlacement.isImmediatelyBefore(
                     item: fresh.frame, neighbor: leading.frame,
@@ -700,13 +773,20 @@ final class AppCoordinator: NSObject, ObservableObject {
             // Avoid changing rules/identity migrations based on this temporary layout.
             return fresh
         }
+        let failedScan = await scanner.scan(apps: runningApps())
+        let failedItem = failedScan.first { matches($0, item) }
+        let failedAnchor = try placementAnchors(failedScan).first { $0.id == temporaryAccessAnchorID }
+        moveLog.error("Borrow verification failed: item=\(String(describing: failedItem?.frame), privacy: .public) anchor=\(String(describing: failedAnchor?.frame), privacy: .public)")
         throw deliveryError ?? BarShelfError.moveNotConfirmed
     }
 
     private func returnBorrowedItem(_ item: MenuBarItemSnapshot) async throws {
         guard let address = temporaryPlacement else { return }
         movingItemID = item.id
-        defer { movingItemID = nil; statusBar.setState(.resting) }
+        defer {
+            movingItemID = nil
+            statusBar.setState(.resting)
+        }
         let scan = await scanner.scan(apps: runningApps())
         guard let fresh = scan.first(where: { $0.id == address.itemID }) else {
             // An exited owner has no live icon to return. A transient AX miss
@@ -727,6 +807,17 @@ final class AppCoordinator: NSObject, ObservableObject {
             let confirmed = await scanner.scan(apps: runningApps())
             if address.isRestored(in: try placementAnchors(confirmed)) { return }
         }
+        let finalScan = await scanner.scan(apps: runningApps())
+        let finalAnchors = try placementAnchors(finalScan).sorted { $0.frame.midX < $1.frame.midX }
+        if address.isRestored(in: finalAnchors) { return }
+        if let returned = finalAnchors.first(where: { $0.id == address.itemID }),
+           let control = finalAnchors.first(where: { $0.id == TemporaryItemPlacement.controlID }),
+           TemporaryItemPlacement.isInOverflow(returned.frame, reference: control.frame,
+                                                screens: screenGeometries()) {
+            throw BarShelfError.returnOrderNotConfirmed
+        }
+        let layout = finalAnchors.map { "\($0.id)=\($0.frame.minX),\($0.frame.width)" }.joined(separator: " | ")
+        moveLog.error("Unconfirmed return: left=\(address.leftID ?? "nil", privacy: .public) right=\(address.rightID ?? "nil", privacy: .public) layout=\(layout, privacy: .public)")
         throw deliveryError ?? BarShelfError.moveNotConfirmed
     }
 
@@ -751,7 +842,7 @@ final class AppCoordinator: NSObject, ObservableObject {
         let boundary = CGRect(x: actualBoundary.minX,
                               y: control.minY, width: actualBoundary.width,
                               height: control.height)
-        return scan.filter { abs($0.frame.midY - control.midY) < 3 }.map {
+        return scan.filter { TemporaryItemPlacement.isAvailableForAccess($0.frame, reference: control) }.map {
             TemporaryItemPlacement.Anchor(id: $0.id, frame: $0.frame)
         } + [TemporaryItemPlacement.Anchor(id: TemporaryItemPlacement.controlID, frame: control),
              TemporaryItemPlacement.Anchor(id: TemporaryItemPlacement.boundaryID, frame: boundary)]
@@ -1342,7 +1433,7 @@ final class AppCoordinator: NSObject, ObservableObject {
             confirm scan frame=\(String(describing: verifiedItem.frame), privacy: .public) \
             zone=\(boundaries.zone(for: verifiedItem.frame).title, privacy: .public)
             """)
-            if boundaries.zone(for: verifiedItem.frame) == zone {
+            if boundaries.confirms(verifiedItem.frame, in: zone, screens: screenGeometries()) {
                 return MoveConfirmation(
                     items: scannedItems,
                     item: verifiedItem,
@@ -1362,13 +1453,14 @@ final class AppCoordinator: NSObject, ObservableObject {
 
     /// Always-hidden items slide in from off screen after the section opens, so a fixed delay
     /// can scan a frame that is still off screen or still animating. Poll until the
-    /// item reports the same on-screen frame twice before using it as a drag source.
+    /// item and compact boundary report stable frames twice before using them.
     private func waitForRevealedItem(
         matching item: MenuBarItemSnapshot,
         screens: [ScreenGeometry]
     ) async throws -> (items: [MenuBarItemSnapshot], item: MenuBarItemSnapshot) {
         var sawItem = false
         var previousFrame: CGRect?
+        var previousBoundaries: BoundaryFrames?
         for _ in 0..<16 {
             try await Task.sleep(for: .milliseconds(140))
             let scannedItems = await scanner.scan(apps: runningApps())
@@ -1377,6 +1469,11 @@ final class AppCoordinator: NSObject, ObservableObject {
                 continue
             }
             sawItem = true
+            guard let boundaries = statusBar.openBoundaryFrames() else {
+                previousFrame = nil
+                previousBoundaries = nil
+                continue
+            }
             let source = CGPoint(x: match.frame.midX, y: match.frame.midY)
             let onScreen = screens.contains {
                 $0.coordinates.quartzPoint(
@@ -1392,11 +1489,13 @@ final class AppCoordinator: NSObject, ObservableObject {
                 continue
             }
             if let previous = previousFrame,
+               previousBoundaries == boundaries,
                abs(previous.midX - match.frame.midX) < 1,
                abs(previous.midY - match.frame.midY) < 1 {
                 return (scannedItems, match)
             }
             previousFrame = match.frame
+            previousBoundaries = boundaries
         }
         throw sawItem ? BarShelfError.itemNotRevealed : BarShelfError.itemNotFound
     }
