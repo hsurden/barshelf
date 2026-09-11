@@ -528,6 +528,32 @@ final class BarShelfTests: XCTestCase {
         XCTAssertTrue(inventory.overflowIDs.isEmpty)
     }
 
+    func testConfirmedPlacementUpdatesOverflowWithoutRescan() {
+        let item = MenuBarItemSnapshot(
+            id: "com.example.drive|slot:0",
+            displayName: "Drive",
+            ownerName: "Drive",
+            bundleIdentifier: "com.example.drive",
+            frame: CGRect(x: -3000, y: 4, width: 20, height: 24),
+            isEnabled: true,
+            ownerPID: 42
+        )
+        var inventory = ShelfInventory()
+        inventory.update(scannedItems: [item], scannedOverflowIDs: [item.id], runningPIDs: [42])
+
+        // A confirmed move into the bar clears the stale off-screen evidence
+        // that kept the Items tab showing the icon as hidden.
+        inventory.recordConfirmedPlacement(itemID: item.id, isOverflowed: false)
+        XCTAssertTrue(inventory.overflowIDs.isEmpty)
+
+        inventory.recordConfirmedPlacement(itemID: item.id, isOverflowed: true)
+        XCTAssertEqual(inventory.overflowIDs, [item.id])
+
+        // Unknown items are ignored so a move cannot invent inventory.
+        inventory.recordConfirmedPlacement(itemID: "com.example.other|slot:0", isOverflowed: true)
+        XCTAssertEqual(inventory.overflowIDs, [item.id])
+    }
+
     func testFlatDisplayHasNoNotchOverflow() {
         let flat = ScreenGeometry(
             coordinates: ScreenCoordinateSpace(

@@ -119,6 +119,17 @@ struct ShelfInventory {
             earlierOverflow.intersection(retainedMissingIDs)
         )
     }
+
+    /// A confirmed section move replaces the moved item's overflow evidence
+    /// from the last resting scan. Other items keep theirs until the next scan.
+    mutating func recordConfirmedPlacement(itemID: String, isOverflowed: Bool) {
+        guard itemsByID[itemID] != nil else { return }
+        if isOverflowed {
+            overflowIDs.insert(itemID)
+        } else {
+            overflowIDs.remove(itemID)
+        }
+    }
 }
 
 extension ScreenGeometry {
