@@ -43,14 +43,25 @@ struct MenuBarWindow: Equatable, Sendable {
 enum WindowMoveEdge: Sendable {
     case left, right
 
-    /// Removing an item shifts the insertion edge by its width when moving right.
-    /// The down is window-addressed at that edge, so no cursor drag path is needed.
+    /// The down is window-addressed at the destination edge, so no cursor drag
+    /// path is needed. A rightward move releases one source width before the edge.
+    ///
+    /// A leftward move releases a quarter of the way into the destination, on
+    /// the requested side. Live calibration on a tightly spaced Tahoe bar
+    /// (19-point neighbor windows) showed macOS lifts the source with its left
+    /// edge at the cursor, then inserts by comparing the release point with the
+    /// neighbors' midpoints: releases up to half the neighbor width landed
+    /// correctly; three-quarters and the full width landed one slot too far.
+    /// The cap at the source width keeps the wide closed divider's release point
+    /// where it was verified.
     func movePoints(source: CGRect, destination: CGRect) -> (start: CGPoint, end: CGPoint) {
         let boundary = self == .left ? destination.minX : destination.maxX
         let movingRight = self == .left ? source.maxX <= boundary : source.minX <= boundary
         let startX = movingRight ? boundary : boundary + (self == .left ? -1 : 1)
+        let inset = min(source.width, destination.width / 4)
+        let leftwardEnd = self == .left ? boundary + inset : boundary - inset
         return (CGPoint(x: startX, y: destination.minY),
-                CGPoint(x: movingRight ? boundary - source.width : boundary, y: destination.minY))
+                CGPoint(x: movingRight ? boundary - source.width : leftwardEnd, y: destination.minY))
     }
 
     func point(on frame: CGRect) -> CGPoint {

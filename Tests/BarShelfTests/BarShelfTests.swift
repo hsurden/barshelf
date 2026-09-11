@@ -2,6 +2,31 @@ import XCTest
 @testable import BarShelf
 
 final class BarShelfTests: XCTestCase {
+    func testVisibleMoveConfirmationRejectsNotchOverflowOnVisibleSideOfDivider() {
+        let boundaries = BoundaryFrames(
+            control: CGRect(x: 1497, y: 1084, width: 38, height: 33),
+            alwaysHidden: CGRect(x: 879, y: 1084, width: 30, height: 33)
+        )
+        let screen = ScreenGeometry(
+            coordinates: ScreenCoordinateSpace(
+                appKitFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
+                quartzFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117)
+            ), statusAreaMinX: 956
+        )
+        let chrome = CGRect(x: 916, y: 4.5, width: 24, height: 24)
+        XCTAssertEqual(boundaries.zone(for: chrome), .alwaysVisible)
+        XCTAssertFalse(boundaries.confirms(chrome, in: .alwaysVisible, screens: [screen]))
+        XCTAssertFalse(boundaries.confirms(
+            CGRect(x: 955, y: 4.5, width: 24, height: 24),
+            in: .alwaysVisible, screens: [screen]))
+        XCTAssertTrue(boundaries.confirms(
+            CGRect(x: 956, y: 4.5, width: 24, height: 24),
+            in: .alwaysVisible, screens: [screen]))
+        XCTAssertTrue(boundaries.confirms(
+            CGRect(x: -200, y: 4.5, width: 24, height: 24),
+            in: .alwaysHidden, screens: [screen]))
+    }
+
     func testBoundaryClassification() {
         let boundaries = BoundaryFrames(
             control: CGRect(x: 900, y: 900, width: 20, height: 24),

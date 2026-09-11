@@ -29,6 +29,7 @@ enum WindowDirectedMove {
         eventSource.setLocalEventsFilterDuringSuppressionState([.permitLocalMouseEvents, .permitLocalKeyboardEvents, .permitSystemDefinedEvents],
             state: .eventSuppressionStateRemoteMouseDrag)
         let points = edge.movePoints(source: source.frame, destination: destination.frame)
+        log.notice("Directed geometry edge=\(edge == .left ? "left" : "right", privacy: .public) source=\(String(describing: source.frame), privacy: .public) destination=\(String(describing: destination.frame), privacy: .public) start=\(String(describing: points.start), privacy: .public) end=\(String(describing: points.end), privacy: .public)")
         let down = try makeEvent(type: .leftMouseDown, window: source,
                                  at: points.start, source: eventSource, command: true)
         let up = try makeEvent(type: .leftMouseUp, window: destination,
@@ -84,7 +85,10 @@ enum WindowDirectedMove {
         let deadline = CFAbsoluteTimeGetCurrent() + 0.6
         repeat {
             if let fresh = MenuBarWindow.readAll().first(where: { $0.id == window.id }),
-               fresh.frame.origin != window.frame.origin { return }
+               fresh.frame.origin != window.frame.origin {
+                log.notice("Directed lifted frame=\(String(describing: fresh.frame), privacy: .public)")
+                return
+            }
             Thread.sleep(forTimeInterval: 0.01)
         } while CFAbsoluteTimeGetCurrent() < deadline
         log.error("Source window did not change origin after down")

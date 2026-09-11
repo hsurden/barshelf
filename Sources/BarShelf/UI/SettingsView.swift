@@ -71,6 +71,14 @@ private struct ItemsSettingsView: View {
                 if coordinator.isScanning || coordinator.isApplyingOrder {
                     ProgressView().controlSize(.small)
                 }
+                Button(coordinator.canReturnTemporaryItem ? "Return Icon" : "Open Shelf") {
+                    if coordinator.canReturnTemporaryItem {
+                        coordinator.returnTemporaryItem()
+                    } else {
+                        coordinator.showShelf()
+                    }
+                }
+                .disabled(busy)
                 Button("Refresh") {
                     Task { await coordinator.refreshItems(promptForPermission: true) }
                 }

@@ -32,6 +32,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "--verify-return"), arguments.count > index + 2 {
+            let bundleIDs = arguments[index + 1].split(separator: ",").map(String.init)
+            let repeats = Int(arguments[index + 2]) ?? 1
+            Task { [weak self] in
+                await self?.coordinator.verifyReturn(bundleIdentifiers: bundleIDs, repeats: repeats)
+            }
+        }
         if let index = arguments.firstIndex(of: "--test-window-move"), arguments.count > index + 1 {
             let bundleID = arguments[index + 1]
             Task { [weak self] in await self?.coordinator.testWindowMove(bundleIdentifier: bundleID) }
@@ -63,6 +70,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         coordinator.prepareForTermination() ? .terminateNow : .terminateCancel
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // An explicit reopen (for example, opening the running app in Finder)
+        // must provide a window even when the menu bar control is unreachable.
+        // Reuse this instance's coordinator; launch and login remain quiet.
+        coordinator.showSettings()
+        return false
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {

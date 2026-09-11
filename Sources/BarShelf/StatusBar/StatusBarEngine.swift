@@ -104,16 +104,23 @@ final class StatusBarEngine: NSObject {
         )
         statusBar.removeStatusItem(alwaysHiddenBoundary)
         alwaysHiddenBoundary = statusBar.statusItem(withLength: Self.openBoundaryLength)
+        configureAlwaysHiddenBoundary()
+        setState(state)
+    }
+
+    private func configureAlwaysHiddenBoundary() {
         configure(
             alwaysHiddenBoundary,
             name: Self.alwaysHiddenBoundaryAutosaveName,
             label: "Always hidden items boundary"
         )
         alwaysHiddenBoundary.button?.alphaValue = 0.5
-        setState(state)
     }
 
     func setState(_ newState: State) {
+        // Resize the existing item so its identity and position survive the
+        // transition. Recreating it can discard its position and briefly expose
+        // the previous, thousands-of-points-wide native window frame.
         state = newState
         switch newState {
         case .resting:
@@ -124,6 +131,21 @@ final class StatusBarEngine: NSObject {
         // The boundary never draws a divider glyph, even while open.
         alwaysHiddenBoundary.button?.image = nil
         updateControlImage()
+    }
+
+    func openBoundaryFrames() -> BoundaryFrames? {
+        guard state == .open,
+              let frame = alwaysHiddenBoundary.button?.window?.frame,
+              Self.isCompactBoundaryFrame(frame) else { return nil }
+        return boundaryFrames()
+    }
+
+    static func isCompactBoundaryFrame(_ frame: CGRect) -> Bool {
+        // Inspect the full native frame, before boundaryFrames trims its width.
+        // Allow native padding, but never accept the closed spacer as a divider.
+        frame.origin.x.isFinite && frame.origin.y.isFinite &&
+            frame.width.isFinite && frame.height.isFinite &&
+            frame.width > 0 && frame.width < 300 && frame.height > 0
     }
 
     func boundaryFrames() -> BoundaryFrames? {

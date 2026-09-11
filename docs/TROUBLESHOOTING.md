@@ -7,6 +7,15 @@ Use these checks before you reset settings or report a bug.
 BarShelf's app icon shows blue, turquoise, and orange tiles on a glass shelf. The menu bar control
 uses the monochrome symbol selected in Settings, with three dots as the default.
 
+## Open Settings when the menu bar control is unreachable
+
+If BarShelf is already running, open the same installed app again in Finder or Spotlight.
+It shows **BarShelf Settings** using the running instance. Launch at login does not open Settings.
+
+This gives accessibility-based tools a normal window to inspect. Compatibility with a particular
+computer-use tool still needs a live check; reopening does not fix macOS's parked menu bar items.
+Do not start a second copy of the executable to obtain a window.
+
 ## BarShelf cannot find menu bar items
 
 Open **BarShelf Settings**, select **Advanced**, and check the Accessibility status. Select **Set
@@ -27,17 +36,33 @@ Do not move the app after macOS grants access.
 
 ## An item does not move to its new section
 
+On macOS Tahoe, first check **System Settings > Menu Bar > Allow in the Menu Bar** for the
+affected app. An app switched off there may still appear in BarShelf's Accessibility inventory,
+but macOS prevents its icon from appearing. BarShelf's **Always hidden** section is separate from
+this system setting. Allow the app in macOS before arranging it in BarShelf.
+
+In a live Chrome test, switching this setting on removed the "This item did not appear on the
+screen" failure, but the move then reported "The current menu bar layout is not safe for this
+move." Enabling the system setting is a prerequisite, not a guarantee that a crowded-bar move
+will succeed.
+
 BarShelf rejects a move when the source frame, target point, or screen is not safe. Before the drag
-starts, BarShelf waits until the item shows a stable position on the screen. macOS decides how menu
+starts, BarShelf waits until the item and the open section boundary show stable positions. It keeps
+the same boundary item when opening the section and rejects a stale, closed spacer frame. macOS decides how menu
 bar overflow fits around a camera notch. BarShelf saves the new section only when a second
 Accessibility scan confirms that macOS completed the move.
+For **In the menu bar**, confirmation also requires the whole icon to be drawable outside the
+notch. Being on the visible side of the divider alone does not count as a successful move.
+When the source icon is behind the notch, a Settings move to **In the menu bar** uses its live
+window to insert it beside BarShelf's control. This still requires a uniquely matched window,
+a drawable destination, and a confirming scan; it never opens the selected app's menu.
 
 macOS keeps some Apple items, for example Clock and Control Center, on the far right side. A
 Command-drag cannot move these items, so BarShelf does not show them in the Items screen.
 
-On a Mac with a camera notch, the menu bar can become full. macOS then parks the leftmost items
-behind the notch and does not draw them. The Settings move path requires a drawable source and shows
-a clear "menu bar is full" message when one is unavailable. Overflow access instead addresses the
+On a Mac with a camera notch, the menu bar can become full and icons can overflow behind the notch.
+Do not confuse this with an app disabled under **Allow in the Menu Bar**. The Settings move path
+requires a usable source position. Overflow access addresses the
 icon's live window, but still needs enough drawable space for the selected icon. Close some menu bar
 apps or turn on tighter item spacing, then try again.
 
@@ -52,6 +77,9 @@ BarShelf keeps the old saved section after a failed move.
 
 ## Open settings or quit from the overflow shelf
 
+If the menu-bar control is hard to reach, reopen BarShelf in Finder or Spotlight, then choose
+**Open Shelf** in Items settings. This uses the same authentication check as the menu-bar control.
+
 Click the shelf's gear to open its menu. Choose **Settings** or **Quit BarShelf** below it.
 Clicking the gear alone leaves settings closed.
 
@@ -64,9 +92,11 @@ name; some apps do not expose a stable Accessibility item.
 ## An overflow icon does not come out or does not return
 
 Overflow-shelf activation temporarily brings only the selected icon to the left edge of the visible
-icons, such as just left of Wi-Fi. Click the exposed icon to open its native menu. Overflow
-selection does not open it automatically, and the icon remains available after the menu closes.
-There is no timeout. Press Escape or click BarShelf to return it to its original neighbors. The
+icons, such as just left of Wi-Fi. If the notch blocks that slot, it uses the leftmost position
+further right that clears the notch, and the icons to its left wait behind the notch until it
+returns. After confirming the move, BarShelf leaves the icon for you to click; it does not open
+the app's menu itself. The icon remains available after the menu closes.
+There is no timeout. Press Escape, click BarShelf, or choose **Return Icon** in Settings to return it to its original neighbors. The
 hidden group stays closed; no visible pointer drag is performed. Saved sections and priority order
 remain unchanged.
 
@@ -130,8 +160,9 @@ Do not attach `state.json` until you inspect it. It can contain app names and cu
 
 ## A menu opens after a short delay
 
-Overflow selection only exposes the real icon; click it yourself to open its menu. BarShelf sends no
-automatic click in this path, so it does not wait for or report a menu-opening acknowledgment.
+Overflow selection exposes the icon at a confirmed drawable position and lets you click its real
+control. It does not automatically send an Accessibility press. A successful press response from
+a directly activated visible picker item is not proof that its native menu opened.
 
 For picker actions that directly activate an already-visible control, Accessibility may time out
 while an app is opening or tracking its native menu. BarShelf treats this as an unconfirmed
@@ -139,3 +170,32 @@ acknowledgment, leaves the selected icon available, and does not show a failure 
 automatically. A second click could close a menu that just opened. If nothing opens, click the real
 icon yourself; the three dots still return it to overflow. An explicitly unsupported or unavailable
 Accessibility control can still produce a recovery message.
+
+## Returning an exposed icon fails
+
+A failed return offers **Retry Return**, **Leave Icon Here**, and **Quit BarShelf**. Retry posts
+one new return attempt. Leave Icon Here ends temporary access at the current position so other
+actions work again. Quit BarShelf exits without another move. Neither choice reports a successful
+return. The next normal inventory refresh reflects the actual layout.
+
+Overflow selection exposes the real icon; click it yourself to open its controls. Close its native
+menu before clicking BarShelf to return it. A failure to return is separate from the system's
+Allow in the Menu Bar setting.
+
+## An inactive app reports missing boundaries
+
+An app disabled under macOS **Menu Bar → Allow in the Menu Bar** can remain in the shelf inventory
+while its Accessibility icon is off the menu-bar row. BarShelf now checks for that unavailable icon
+before building a temporary return address and explains how to enable it and refresh. This
+geometry alone does not prove the switch is off, so the message also mentions the app's own icon
+setting. No system setting is changed automatically.
+
+If an icon returned to overflow but missed its original neighbors, the dialog now says that the
+icon is back in overflow and offers **Keep Current Order**. This button performs no move; it accepts
+the position already reached. BarShelf still does not claim that the original order was restored.
+
+The shelf and searchable picker omit icons that macOS currently reports off the menu-bar row
+or with invalid geometry. Real hidden icons and icons behind the notch remain available.
+Unavailable items remain in Settings; enable them in macOS or their own app, then refresh
+BarShelf (or reopen the shelf) to include them again. Availability is checked again at selection
+time, so an item disabled after the shelf opened can still show recovery guidance.

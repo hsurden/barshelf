@@ -25,18 +25,27 @@ reveal-toggle section and no classic hide-and-reveal mode.
 - A right-click opens a short command menu.
 - `Command-Backslash` opens or closes the shelf.
 - `Command-Shift-Space` opens the item picker.
+- Explicitly reopening the running app in Finder or Spotlight shows its existing Settings window,
+  creating that window if needed. Launch at login remains quiet.
+- **Open Shelf** in Items settings opens the same authenticated overflow shelf.
 
 The shelf includes both deliberately hidden items and items currently displaced by physical
 overflow. Its contents do not reshuffle until it is closed and reopened. Selecting an overflow item
 requests one temporary move of its real status control to the left edge of the visible icons, before
-the leftmost currently drawable icon. The hidden group stays closed throughout the move. Selecting
-an overflow entry exposes the icon only; it does not send AXPress or open its menu. The user clicks
-the real icon when ready. The icon must be confirmed at that left edge and fully outside the notch
-before the temporary session begins. It remains available after its menu closes; Escape or a normal
-BarShelf click requests a verified return to its original neighbors. There is no automatic timeout.
+the leftmost currently drawable icon. If that slot cannot clear the notch, it uses the leftmost slot
+further right that does, never right of BarShelf's control. macOS then pushes the icons left of
+that slot behind the notch, in their existing order, until the item returns; the saved layout does
+not change. A Live Activity is never used as a slot. The hidden group stays closed throughout the move. Selecting
+an overflow entry exposes its real icon after the position is confirmed beside the chosen anchor
+and fully outside the notch. It does not press the overflow icon automatically; the user clicks
+that icon to open its native controls. It remains available after its menu closes; Escape or a normal
+BarShelf click requests a verified return to its original neighbors. Settings also offers **Return Icon**
+during temporary access. There is no automatic timeout.
 Temporary moves never change saved rules or priority order. Window-addressed input avoids a visible
 pointer drag and also handles the return. If a return fails, BarShelf retains its return address in
-memory and offers another explicit click to retry. The picker supports filtering and links directly
+memory while offering Retry Return, Leave Icon Here, or Quit BarShelf. If the icon is already back
+in overflow, the dialog explains that only its original order is unconfirmed and offers Keep Current Order. Leaving the icon abandons
+the temporary return address without another move; quitting can proceed even if the return failed. The picker supports filtering and links directly
 to arrangement. The right-click menu contains the shelf, the picker, and Settings. Less common
 settings stay in the settings window. The App section in Settings includes an explicit Quit BarShelf
 HS action.
@@ -117,3 +126,9 @@ network triggers, script triggers, automation, user-defined hotkeys, or a group 
 Profiles save stored rules and settings. Loading a profile does not yet move every real item into
 place. Import also loads stored rules and settings without rearranging the live menu bar. Do not
 describe either action as automatic layout restoration until the app confirms each real move.
+
+The shelf and searchable picker omit icons that macOS currently reports off the menu-bar row
+or with invalid geometry. Real hidden icons and icons behind the notch remain available.
+Unavailable items remain in Settings; enable them in macOS or their own app, then refresh
+BarShelf (or reopen the shelf) to include them again. Availability is checked again at selection
+time, so an item disabled after the shelf opened can still show recovery guidance.

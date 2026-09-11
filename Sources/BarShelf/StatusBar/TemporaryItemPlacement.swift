@@ -58,17 +58,53 @@ struct TemporaryItemPlacement {
             (!hasRight || (index + 1 < ordered.count && ordered[index + 1].id == rightID))
     }
 
-    static func leadingVisibleAnchor(in anchors: [Anchor], excluding itemID: String,
-                                     screens: [ScreenGeometry]) -> Anchor? {
-        anchors.filter {
-            $0.id != itemID && $0.id != boundaryID && isDrawable($0.frame, screens: screens)
-        }.min { $0.frame.minX < $1.frame.minX }
+    /// Anchors the item can be inserted immediately left of, in preference
+    /// order: drawable icons from left to right, ending with BarShelf's control.
+    /// Only slots that keep the whole item clear of the notch qualify. On a
+    /// full bar, macOS pushes the icons left of the chosen anchor behind the
+    /// notch in their existing order; they come back when the item returns.
+    /// Nothing right of the control qualifies, so the dots and macOS's fixed
+    /// items stay put. `ineligibleIDs` excludes items such as Live Activities,
+    /// which macOS positions itself.
+    static func accessCandidates(for item: Anchor, in anchors: [Anchor],
+                                 excluding ineligibleIDs: Set<String> = [],
+                                 screens: [ScreenGeometry]) -> [Anchor] {
+        guard let control = anchors.first(where: { $0.id == controlID }) else { return [] }
+        return anchors.filter {
+            $0.id != item.id && $0.id != boundaryID && !ineligibleIDs.contains($0.id) &&
+            $0.frame.minX <= control.frame.minX && isDrawable($0.frame, screens: screens)
+        }
+        .sorted { $0.frame.minX < $1.frame.minX }
+        .filter { anchor in
+            let points = WindowMoveEdge.left.movePoints(source: item.frame, destination: anchor.frame)
+            return isDrawable(CGRect(origin: points.end, size: item.frame.size), screens: screens)
+        }
+    }
+
+    static func accessAnchor(for item: Anchor, in anchors: [Anchor],
+                             excluding ineligibleIDs: Set<String> = [],
+                             screens: [ScreenGeometry]) -> Anchor? {
+        accessCandidates(for: item, in: anchors, excluding: ineligibleIDs, screens: screens).first
     }
 
     static func isImmediatelyBefore(item: CGRect, neighbor: CGRect, otherItems: [CGRect]) -> Bool {
         item.width > 0 && item.maxX <= neighbor.minX + 2 &&
         neighbor.minX - item.maxX <= 12 &&
         !otherItems.contains { $0.midX > item.midX && $0.midX < neighbor.midX }
+    }
+
+    static func isInOverflow(_ frame: CGRect, reference: CGRect, screens: [ScreenGeometry]) -> Bool {
+        frame.width > 0 && frame.height > 0 &&
+        isOnMenuBarRow(frame, reference: reference) && !isDrawable(frame, screens: screens)
+    }
+
+    static func isAvailableForAccess(_ frame: CGRect, reference: CGRect) -> Bool {
+        frame.minX.isFinite && frame.minY.isFinite && frame.width.isFinite && frame.height.isFinite &&
+        frame.width > 0 && frame.height > 0 && isOnMenuBarRow(frame, reference: reference)
+    }
+
+    static func isOnMenuBarRow(_ frame: CGRect, reference: CGRect) -> Bool {
+        abs(frame.midY - reference.midY) < 3
     }
 
     /// Require the whole icon to clear the notch, not just its center.

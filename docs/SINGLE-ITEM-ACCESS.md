@@ -1,10 +1,17 @@
 # Single-item access in BarShelf
 
-HS's requested interaction: choose one overflow app, put its real icon at the left edge of the
+Original HS interaction (2026-09-06): choose one overflow app, put its real icon at the left edge of the
 visible controls (currently left of Wi-Fi), let HS click it to open the native interface, then click
 the dots to put it back. Overflow selection does not automatically press the selected icon. The
 hidden group stays closed, without a visible pointer drag. Saved rules do not change. The return
 address contains neighbor identities in memory, never persisted coordinates.
+
+As of 2026-09-10 (evening), when the notch blocks the left-edge slot, access uses the leftmost slot
+further right that clears the notch, ending at BarShelf's control. macOS pushes the icons left of
+that slot behind the notch, in order, and they slide back when the item returns, so the saved
+layout never changes and only the selected item moves. Live Activities are never used as a slot:
+macOS positions them itself, and an icon released just left of one lands on its right.
+Confirmation follows the chosen anchor identity, while return still uses the original neighbors. Settings exposes Return Icon as another explicit return action.
 
 ## Evidence from other managers
 
@@ -56,7 +63,7 @@ not itself move another app's native menu or popover.
 - Menu/popover behavior is owned by each app. The move test does not by itself prove that every
   app opens its menu correctly. Multi-display movement has not been verified.
 
-## Delayed menu response and revised interaction (2026-09-06)
+## Historical interaction decision (2026-09-06)
 
 HS observed the menu opening shortly after BarShelf incorrectly reported that it had failed.
 AXPress had collapsed every non-success response into false. Uncertain responses now remain
@@ -64,3 +71,37 @@ unconfirmed rather than being described as menu failures. Explicitly unavailable
 recovery guidance. HS then chose the simpler overflow interaction: expose the icon only and let
 him click it. That path no longer posts AXPress or waits for its reply. This leaves the verified
 window move and return behavior intact. The local harness now includes three AX-result tests.
+
+## Return geometry calibration on HS's Mac (2026-09-10, evening)
+
+The width-based release in the next section landed every tested return one slot too far on HS's
+MacBook (`NSStatusItemSpacing` 3, neighbor windows about 19 points wide). A live calibration forced
+the leftward release point to fractions of the destination window width, for Rectangle (24-point
+window) and CleanShot X (20-point window) returning before 19-point neighbors: 0, 0.25, and 0.5
+landed between the saved neighbors; 0.75 and 1.0 landed one slot too far. Logging the lifted
+window showed that macOS moves the source window's left edge to the cursor on the down, then
+inserts by comparing the release point with the neighbors' midpoints.
+
+A leftward move now releases a quarter of the destination width inside the destination, on the
+requested side, capped at the source width so the closed divider keeps its verified release point.
+With that rule, `--verify-return` passed 18 of 18 live round trips on HS's Mac: three each for
+Rectangle, CleanShot X, Google Drive, OneDrive, GoodSync, and Antigravity, covering third-party
+neighbors, the Now Playing Control Center neighbor, and the divider. The new rule has not been run
+on Jon's Mac, whose default spacing and parked notch items differ; it needs a live
+`--verify-return` check there. The strict neighbor check is unchanged.
+
+`--verify-return <bundle ids> <rounds>` exposes and returns each listed item with the normal rules
+and prints the wanted and actual neighbors for every round trip.
+
+## Return geometry verification (2026-09-10)
+
+A leftward return accounts for the selected native window's width, but caps that adjustment at
+the destination window's width when inserting before a neighbor. Without the adjustment, Rectangle
+landed before its original left neighbor. Without the cap, Weather's 66-point status window
+overshot a 38–40-point neighbor and landed after it. The final Accessibility scan still requires
+the original neighbor identities; a changed order is not accepted as a successful return.
+
+The same signed build passed live shelf expose/return checks for Weather, Rectangle, and Chrome
+on Jon's Mac. These checks verified placement and return, not opening every app's native menu.
+The narrow-neighbor regression is covered by the unit suite. Failed returns offer explicit retry,
+leave-in-place, and quit options; both leaving and quitting were verified live during debugging.
