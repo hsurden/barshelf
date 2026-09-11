@@ -7,7 +7,8 @@
 **Keep a crowded macOS menu bar under control.**
 
 BarShelf is a native menu bar manager for macOS. It keeps important items visible and puts
-everything else one click away.
+everything else one click away. It is free and offers some functionality of a toolbar manager like Bartender,
+such as hiding some toolbar icons so the toolbar is not too busy.
 
 [Download for macOS](https://github.com/hsurden/barshelf/releases/latest) ·
 [Report a problem](https://github.com/hsurden/barshelf/issues) · MIT licensed
