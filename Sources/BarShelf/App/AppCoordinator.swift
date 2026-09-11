@@ -649,33 +649,43 @@ final class AppCoordinator: NSObject, ObservableObject {
             message = "Could not bring out \(item.displayName): \(error.localizedDescription)"
         }
 
-        // A failed return retains the identity-based address. Retry only after
-        // another explicit BarShelf click/Escape, never on a timer or app event.
-        while temporaryPlacement != nil {
-            activationPhase = .restoring
-            do {
-                try await returnBorrowedItem(item)
-                temporaryPlacement = nil
-                temporaryAccessAnchorID = nil
-            } catch {
-                statusBar.setState(.resting)
-                moveLog.error("Return failed for \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
-                let recovery = returnFailureChoice(itemName: item.displayName, error: error)
-                message = nil
-                quitAfterInteraction = recovery == .alertThirdButtonReturn
-                if recovery == .alertFirstButtonReturn {
-                    // Only this explicit button authorizes another move.
-                    continue
-                }
-                // Leave the live icon where macOS put it. Abandon only the
-                // in-memory return address, never claim a confirmed return.
-                temporaryPlacement = nil
-                temporaryAccessAnchorID = nil
-            }
-        }
+        await returnTemporaryItem(item)
         await restoreAfterActivation()
         if message != nil { showActivationError() }
         if quitAfterInteraction { NSApp.terminate(nil) }
+    }
+
+    /// Returns a temporarily placed item to its in-memory address. A failure
+    /// keeps the address and asks the user; only Retry Return authorizes
+    /// another move, never a timer or app event. Pass `initialError` when a
+    /// return already failed, so the user is asked before any further move.
+    private func returnTemporaryItem(_ item: MenuBarItemSnapshot, after initialError: Error? = nil) async {
+        var failure = initialError
+        while temporaryPlacement != nil {
+            if failure == nil {
+                activationPhase = .restoring
+                do {
+                    try await returnBorrowedItem(item)
+                    temporaryPlacement = nil
+                    temporaryAccessAnchorID = nil
+                    continue
+                } catch {
+                    failure = error
+                }
+            }
+            guard let error = failure else { continue }
+            failure = nil
+            statusBar.setState(.resting)
+            moveLog.error("Return failed for \(item.id, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            let recovery = returnFailureChoice(itemName: item.displayName, error: error)
+            message = nil
+            quitAfterInteraction = recovery == .alertThirdButtonReturn
+            if recovery == .alertFirstButtonReturn { continue }
+            // Leave the live icon where macOS put it. Abandon only the
+            // in-memory return address, never claim a confirmed return.
+            temporaryPlacement = nil
+            temporaryAccessAnchorID = nil
+        }
     }
 
     private func returnFailureChoice(itemName: String, error: Error) -> NSApplication.ModalResponse {
@@ -1149,6 +1159,67 @@ final class AppCoordinator: NSObject, ObservableObject {
         }
         await restoreAfterActivation()
         print("window-test: complete"); fflush(stdout)
+    }
+
+    /// Launch-flag helper (--verify-return): expose and return each item with the
+    /// normal placement rules, and report wanted vs actual neighbors per round trip.
+    /// The run stops at the first failure and hands the item to the normal
+    /// recovery path, so its return address is never discarded silently.
+    func verifyReturn(bundleIdentifiers: [String], repeats: Int) async {
+        try? await Task.sleep(for: .milliseconds(1500))
+        guard activationPhase == .resting, AccessibilityPermission.isGranted else {
+            print("verify-return: not resting or no Accessibility"); fflush(stdout); return
+        }
+        for bundleID in bundleIdentifiers {
+            for round in 1...max(1, repeats) {
+                await refreshItems(promptForPermission: false)
+                guard let item = items.first(where: { $0.bundleIdentifier == bundleID }) else {
+                    print("verify-return: missing \(bundleID)"); fflush(stdout); break
+                }
+                activationPhase = .revealing(item.id)
+                do {
+                    _ = try await borrowItem(item)
+                } catch {
+                    // A failed borrow may already have moved the icon. Keep
+                    // its address and use the normal verified return.
+                    print("verify-return: \(bundleID) round=\(round) BORROW FAILED \(error.localizedDescription); stopping")
+                    fflush(stdout)
+                    await returnTemporaryItem(item)
+                    await stopVerifyReturn()
+                    return
+                }
+                guard let address = temporaryPlacement else { await restoreAfterActivation(); return }
+                do {
+                    try await returnBorrowedItem(item)
+                } catch {
+                    // Keep the address: the user decides whether to retry,
+                    // leave the icon, or quit. No further round starts.
+                    print("verify-return: \(bundleID) round=\(round) NOT-RESTORED wanted=[\(address.leftID ?? "nil") | \(address.rightID ?? "nil")]; stopping")
+                    fflush(stdout)
+                    await returnTemporaryItem(item, after: error)
+                    await stopVerifyReturn()
+                    return
+                }
+                temporaryPlacement = nil
+                temporaryAccessAnchorID = nil
+                let outcome = "RESTORED"
+                let scan = await scanner.scan(apps: runningApps())
+                let ordered = ((try? placementAnchors(scan)) ?? []).sorted { $0.frame.midX < $1.frame.midX }
+                let index = ordered.firstIndex { $0.id == address.itemID }
+                let gotLeft = index.flatMap { $0 > 0 ? ordered[$0 - 1].id : nil } ?? "nil"
+                let gotRight = index.flatMap { $0 + 1 < ordered.count ? ordered[$0 + 1].id : nil } ?? "nil"
+                print("verify-return: \(bundleID) round=\(round) \(outcome) wanted=[\(address.leftID ?? "nil") | \(address.rightID ?? "nil")] got=[\(gotLeft) | \(gotRight)]")
+                fflush(stdout)
+                await restoreAfterActivation()
+            }
+        }
+        print("verify-return: complete"); fflush(stdout)
+    }
+
+    private func stopVerifyReturn() async {
+        await restoreAfterActivation()
+        print("verify-return: stopped"); fflush(stdout)
+        if quitAfterInteraction { NSApp.terminate(nil) }
     }
 
     /// Launch-flag helper: activates an item the way a shelf click does and

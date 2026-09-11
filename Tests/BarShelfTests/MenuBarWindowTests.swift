@@ -45,10 +45,22 @@ final class MenuBarWindowTests: XCTestCase {
         XCTAssertEqual(outward.end, CGPoint(x: 1264, y: 0))
         let returned = WindowMoveEdge.left.movePoints(source: visible, destination: hosted.frame)
         XCTAssertEqual(returned.start, CGPoint(x: -4016, y: 0))
-        XCTAssertEqual(returned.end, CGPoint(x: -3990, y: 0))
+        XCTAssertEqual(returned.end, CGPoint(x: -4005.5, y: 0))
         let right = WindowMoveEdge.right.movePoints(source: visible, destination: hosted.frame)
         XCTAssertEqual(right.start, CGPoint(x: -3976, y: 0))
-        XCTAssertEqual(right.end, CGPoint(x: -3952, y: 0))
+        XCTAssertEqual(right.end, CGPoint(x: -3986.5, y: 0))
+    }
+
+    func testLeftwardReturnReleasesBeforeNarrowNeighborMidpoint() {
+        // Live calibration, 2026-09-10, NSStatusItemSpacing 3: a 24-point
+        // Rectangle window returning before a 19-point neighbor landed
+        // correctly at 0, 0.25, and 0.5 of the neighbor width, and one slot
+        // too far at 0.75 and 1.0.
+        let rectangle = CGRect(x: 1120, y: 0, width: 24, height: 33)
+        let neighbor = CGRect(x: -3927, y: 0, width: 19, height: 33)
+        let end = WindowMoveEdge.left.movePoints(source: rectangle, destination: neighbor).end.x
+        XCTAssertEqual(end, neighbor.minX + 4.75)
+        XCTAssertLessThan(end, neighbor.midX)
     }
 
     func testWideWeatherReturnDoesNotOvershootNarrowNeighbor() {
@@ -58,8 +70,8 @@ final class MenuBarWindowTests: XCTestCase {
         for width: CGFloat in [38, 40] {
             let neighbor = CGRect(x: -4603, y: 0, width: width, height: 33)
             let points = WindowMoveEdge.left.movePoints(source: weather, destination: neighbor)
-            XCTAssertEqual(points.end.x, neighbor.maxX)
-            XCTAssertLessThanOrEqual(points.end.x, neighbor.maxX)
+            XCTAssertEqual(points.end.x, neighbor.minX + width / 4)
+            XCTAssertLessThan(points.end.x, neighbor.midX)
         }
         // The wide closed boundary still uses the selected icon's width.
         let divider = CGRect(x: -4387, y: 0, width: 5016, height: 33)

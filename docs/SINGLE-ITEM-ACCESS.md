@@ -69,6 +69,27 @@ recovery guidance. HS then chose the simpler overflow interaction: expose the ic
 him click it. That path no longer posts AXPress or waits for its reply. This leaves the verified
 window move and return behavior intact. The local harness now includes three AX-result tests.
 
+## Return geometry calibration on HS's Mac (2026-09-10, evening)
+
+The width-based release in the next section landed every tested return one slot too far on HS's
+MacBook (`NSStatusItemSpacing` 3, neighbor windows about 19 points wide). A live calibration forced
+the leftward release point to fractions of the destination window width, for Rectangle (24-point
+window) and CleanShot X (20-point window) returning before 19-point neighbors: 0, 0.25, and 0.5
+landed between the saved neighbors; 0.75 and 1.0 landed one slot too far. Logging the lifted
+window showed that macOS moves the source window's left edge to the cursor on the down, then
+inserts by comparing the release point with the neighbors' midpoints.
+
+A leftward move now releases a quarter of the destination width inside the destination, on the
+requested side, capped at the source width so the closed divider keeps its verified release point.
+With that rule, `--verify-return` passed 18 of 18 live round trips on HS's Mac: three each for
+Rectangle, CleanShot X, Google Drive, OneDrive, GoodSync, and Antigravity, covering third-party
+neighbors, the Now Playing Control Center neighbor, and the divider. The new rule has not been run
+on Jon's Mac, whose default spacing and parked notch items differ; it needs a live
+`--verify-return` check there. The strict neighbor check is unchanged.
+
+`--verify-return <bundle ids> <rounds>` exposes and returns each listed item with the normal rules
+and prints the wanted and actual neighbors for every round trip.
+
 ## Return geometry verification (2026-09-10)
 
 A leftward return accounts for the selected native window's width, but caps that adjustment at
