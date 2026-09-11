@@ -741,31 +741,44 @@ final class AppCoordinator: NSObject, ObservableObject {
               divider.frame.maxX <= control.frame.minX else {
                 throw BarShelfError.boundariesUnavailable
         }
-        guard let leading = TemporaryItemPlacement.accessAnchor(
-            for: .init(id: fresh.id, frame: fresh.frame), in: anchors, screens: screenGeometries()
-        ) else {
-            throw BarShelfError.menuBarFull
-        }
+        // Prefer the leftmost slot that clears the notch. On a full bar macOS
+        // pushes the icons left of it behind the notch, in order, until the
+        // item returns; the saved layout never changes.
+        let candidates = TemporaryItemPlacement.accessCandidates(
+            for: .init(id: fresh.id, frame: fresh.frame), in: anchors,
+            excluding: Set(scan.filter(\.isLiveActivity).map(\.id)), screens: screenGeometries()
+        )
+        guard !candidates.isEmpty else { throw BarShelfError.menuBarFull }
         // Keep the return address before posting: even an unconfirmed drag may
         // have moved the icon. Failure must attempt a verified return.
         moveLog.notice("Borrow address: item=\(address.itemID, privacy: .public) left=\(address.leftID ?? "nil", privacy: .public) right=\(address.rightID ?? "nil", privacy: .public)")
         temporaryPlacement = address
-        temporaryAccessAnchorID = leading.id
+        var postedAnchor: TemporaryItemPlacement.Anchor?
         var deliveryError: Error?
-        do {
+        for candidate in candidates {
+            temporaryAccessAnchorID = candidate.id
             do {
-                try await moveTemporaryItem(fresh, beside: leading, edge: .left,
+                try await moveTemporaryItem(fresh, beside: candidate, edge: .left,
                                             scan: scan, requireDrawable: true)
-            } catch BarShelfError.menuBarFull where leading.id != control.id {
-                // AX describes the button; the surrounding native window can
-                // be wider. This error occurs before any input is posted, so
-                // retry the control slot using the mover's full-window check.
-                temporaryAccessAnchorID = control.id
-                try await moveTemporaryItem(fresh, beside: control, edge: .left,
-                                            scan: scan, requireDrawable: true)
+                postedAnchor = candidate
+                break
+            } catch BarShelfError.menuBarFull {
+                // AX describes the button; the native window can be wider.
+                // The full-window check rejects the slot before any input is
+                // posted, so the next slot to the right is safe to try.
+                continue
+            } catch {
+                postedAnchor = candidate
+                deliveryError = error
+                break
             }
         }
-        catch { deliveryError = error }
+        guard postedAnchor != nil else {
+            // Every slot failed the full-window check and nothing was posted.
+            temporaryPlacement = nil
+            temporaryAccessAnchorID = nil
+            throw BarShelfError.menuBarFull
+        }
         // The section stays closed throughout; verify before opening the menu.
         for _ in 0..<10 {
             try? await Task.sleep(for: .milliseconds(120))

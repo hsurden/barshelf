@@ -32,8 +32,10 @@ reveal-toggle section and no classic hide-and-reveal mode.
 The shelf includes both deliberately hidden items and items currently displaced by physical
 overflow. Its contents do not reshuffle until it is closed and reopened. Selecting an overflow item
 requests one temporary move of its real status control to the left edge of the visible icons, before
-the leftmost currently drawable icon. If that slot cannot clear the notch, it uses a drawable slot
-immediately left of BarShelf's control instead. The hidden group stays closed throughout the move. Selecting
+the leftmost currently drawable icon. If that slot cannot clear the notch, it uses the leftmost slot
+further right that does, never right of BarShelf's control. macOS then pushes the icons left of
+that slot behind the notch, in their existing order, until the item returns; the saved layout does
+not change. A Live Activity is never used as a slot. The hidden group stays closed throughout the move. Selecting
 an overflow entry exposes its real icon after the position is confirmed beside the chosen anchor
 and fully outside the notch. It does not press the overflow icon automatically; the user clicks
 that icon to open its native controls. It remains available after its menu closes; Escape or a normal

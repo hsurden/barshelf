@@ -92,9 +92,10 @@ name; some apps do not expose a stable Accessibility item.
 ## An overflow icon does not come out or does not return
 
 Overflow-shelf activation temporarily brings only the selected icon to the left edge of the visible
-icons, such as just left of Wi-Fi. If that slot is blocked, it uses a drawable position beside
-BarShelf's dots instead. After confirming the move, it sends one Accessibility press to open the
-app's native controls. The icon remains available after the menu closes.
+icons, such as just left of Wi-Fi. If the notch blocks that slot, it uses the leftmost position
+further right that clears the notch, and the icons to its left wait behind the notch until it
+returns. After confirming the move, BarShelf leaves the icon for you to click; it does not open
+the app's menu itself. The icon remains available after the menu closes.
 There is no timeout. Press Escape, click BarShelf, or choose **Return Icon** in Settings to return it to its original neighbors. The
 hidden group stays closed; no visible pointer drag is performed. Saved sections and priority order
 remain unchanged.

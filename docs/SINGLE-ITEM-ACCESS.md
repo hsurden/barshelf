@@ -6,9 +6,12 @@ the dots to put it back. Overflow selection does not automatically press the sel
 hidden group stays closed, without a visible pointer drag. Saved rules do not change. The return
 address contains neighbor identities in memory, never persisted coordinates.
 
-As of 2026-09-10, access falls back to a drawable slot beside BarShelf's control when the original
-left-edge slot is blocked. Confirmation follows the chosen anchor identity, while return still
-uses the original neighbors. Settings exposes Return Icon as another explicit return action.
+As of 2026-09-10 (evening), when the notch blocks the left-edge slot, access uses the leftmost slot
+further right that clears the notch, ending at BarShelf's control. macOS pushes the icons left of
+that slot behind the notch, in order, and they slide back when the item returns, so the saved
+layout never changes and only the selected item moves. Live Activities are never used as a slot:
+macOS positions them itself, and an icon released just left of one lands on its right.
+Confirmation follows the chosen anchor identity, while return still uses the original neighbors. Settings exposes Return Icon as another explicit return action.
 
 ## Evidence from other managers
 

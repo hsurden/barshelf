@@ -23,6 +23,55 @@ final class TemporaryItemPlacementTests: XCTestCase {
             screens: [screen]))
     }
 
+    func testFullBarUsesLeftmostSlotThatClearsNotchInsteadOfControl() {
+        let screen = ScreenGeometry(coordinates: ScreenCoordinateSpace(
+            appKitFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
+            quartzFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117)
+        ), statusAreaMinX: 956)
+        let item = TemporaryItemPlacement.Anchor(id: "chrome",
+            frame: CGRect(x: -4000, y: 4.5, width: 24, height: 24))
+        let control = anchor(TemporaryItemPlacement.controlID, 1497)
+        // Wi-Fi's slot would cross the notch; Bluetooth's clears it. macOS then
+        // pushes Wi-Fi behind the notch until the item returns.
+        let anchors = [item, anchor("wifi", 960), anchor("bluetooth", 982), anchor("sound", 1004), control]
+        XCTAssertEqual(TemporaryItemPlacement.accessAnchor(for: item, in: anchors, screens: [screen])?.id,
+                       "bluetooth")
+        XCTAssertEqual(TemporaryItemPlacement.accessCandidates(for: item, in: anchors, screens: [screen]).map(\.id),
+                       ["bluetooth", "sound", TemporaryItemPlacement.controlID])
+    }
+
+    func testAccessSkipsLiveActivitiesAndItemsRightOfControl() {
+        let screen = ScreenGeometry(coordinates: ScreenCoordinateSpace(
+            appKitFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+            quartzFrame: CGRect(x: 0, y: 0, width: 1512, height: 982)
+        ), statusAreaMinX: 848)
+        let item = TemporaryItemPlacement.Anchor(id: "antigravity",
+            frame: CGRect(x: -4055, y: 4.5, width: 27, height: 24))
+        let pill = TemporaryItemPlacement.Anchor(id: "united.liveActivity",
+            frame: CGRect(x: 983, y: 4.5, width: 135, height: 24))
+        let control = anchor(TemporaryItemPlacement.controlID, 1303)
+        let anchors = [item, pill, anchor("bluetooth", 1145), control, anchor("clock", 1376)]
+        XCTAssertEqual(TemporaryItemPlacement.accessAnchor(
+            for: item, in: anchors, excluding: [pill.id], screens: [screen])?.id, "bluetooth")
+        XCTAssertFalse(TemporaryItemPlacement.accessCandidates(
+            for: item, in: anchors, excluding: [pill.id], screens: [screen]).contains { $0.id == "clock" })
+    }
+
+    func testLiveActivityIdentityIsRecognized() {
+        let pill = MenuBarItemSnapshot(
+            id: "com.apple.controlcenter|ax:com.united.UnitedCustomerFacingIPhone.liveActivity",
+            displayName: "United", ownerName: "Control Center",
+            bundleIdentifier: "com.apple.controlcenter",
+            frame: CGRect(x: 983, y: 4.5, width: 135, height: 24), isEnabled: true)
+        let wifi = MenuBarItemSnapshot(
+            id: "com.apple.controlcenter|ax:com.apple.menuextra.wifi",
+            displayName: "Wi-Fi", ownerName: "Control Center",
+            bundleIdentifier: "com.apple.controlcenter",
+            frame: CGRect(x: 1163, y: 4.5, width: 22, height: 24), isEnabled: true)
+        XCTAssertTrue(pill.isLiveActivity)
+        XCTAssertFalse(wifi.isLiveActivity)
+    }
+
     func testOverflowReturnDistinguishesWrongOrderFromSystemDisabledIcon() throws {
         let screen = ScreenGeometry(coordinates: .init(
             appKitFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117),

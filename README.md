@@ -35,7 +35,7 @@ https://github.com/iannuttall/barkeep
 - Click the BarShelf icon to open a stable shelf of overflowed and Always hidden items. Selecting an entry brings its real icon to a reachable position; click that icon to open its native controls. If returning it fails, choose Retry Return, Leave Icon Here, or Quit BarShelf.
 - Click the shelf’s gear for **Settings**, followed by **Quit BarShelf**.
 - Type while the shelf is open, or Option-click the icon, to open the searchable full picker.
-- Open the already-running BarShelf app again in Finder or Spotlight to show Settings, then use **Open Shelf** to reach the overflow controls. Temporary access uses a position beside the dots if the left-edge slot is blocked by the notch; **Return Icon** in Settings puts it back.
+- Open the already-running BarShelf app again in Finder or Spotlight to show Settings, then use **Open Shelf** to reach the overflow controls. On a full menu bar, temporary access uses the leftmost spot that clears the notch, and the icons to its left wait behind the notch until it returns; **Return Icon** in Settings puts it back.
 
 
 ## Your menu bar data stays on your Mac

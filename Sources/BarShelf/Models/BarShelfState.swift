@@ -239,6 +239,17 @@ extension MenuBarItemSnapshot {
         return identifier == "com.apple.menuextra.clock" ||
             identifier == "com.apple.menuextra.controlcenter"
     }
+
+    /// An iPhone Live Activity mirrored into the menu bar by Control Center,
+    /// such as a flight pill. macOS positions it itself: live tests on
+    /// 2026-09-10 showed Command-drag cannot move it and an icon released
+    /// immediately left of it lands on its right instead.
+    var isLiveActivity: Bool {
+        guard bundleIdentifier == "com.apple.controlcenter" else { return false }
+        let identifier = sourceIdentifier ?? id.split(separator: "|", maxSplits: 1)
+            .dropFirst().first.map(String.init)?.replacingOccurrences(of: "ax:", with: "")
+        return identifier?.hasSuffix(".liveActivity") == true
+    }
 }
 
 struct BoundaryFrames: Sendable, Equatable {
