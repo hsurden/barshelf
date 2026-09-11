@@ -168,16 +168,19 @@ final class TemporaryItemPlacementTests: XCTestCase {
             appKitFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
             quartzFrame: CGRect(x: 0, y: 0, width: 1512, height: 982)
         ), statusAreaMinX: 850)
-        let anchors = [anchor("overflow", -4000), anchor("notch", 700),
-                       anchor("wifi", 1053), anchor("volume", 1196),
-                       anchor(TemporaryItemPlacement.controlID, 1302)]
-        XCTAssertEqual(TemporaryItemPlacement.leadingVisibleAnchor(
-            in: anchors, excluding: "overflow", screens: [screen])?.id, "wifi")
-        XCTAssertEqual(TemporaryItemPlacement.leadingVisibleAnchor(
-            in: [anchor("selected", 1015), anchor("wifi", 1053)],
-            excluding: "selected", screens: [screen])?.id, "wifi")
-        XCTAssertNil(TemporaryItemPlacement.leadingVisibleAnchor(
-            in: [anchor("notch", 700)], excluding: "selected", screens: [screen]))
+        let control = anchor(TemporaryItemPlacement.controlID, 1302)
+        let overflow = anchor("overflow", -4000)
+        let anchors = [overflow, anchor("notch", 700),
+                       anchor("wifi", 1053), anchor("volume", 1196), control]
+        XCTAssertEqual(TemporaryItemPlacement.accessAnchor(
+            for: overflow, in: anchors, screens: [screen])?.id, "wifi")
+        let selected = anchor("selected", 1015)
+        XCTAssertEqual(TemporaryItemPlacement.accessAnchor(
+            for: selected, in: [selected, anchor("wifi", 1053), control], screens: [screen])?.id, "wifi")
+        // An icon behind the notch is never a slot, and without BarShelf's
+        // control there is no bounded set of slots at all.
+        XCTAssertNil(TemporaryItemPlacement.accessAnchor(
+            for: selected, in: [selected, anchor("notch", 700)], screens: [screen]))
     }
 
     @MainActor
