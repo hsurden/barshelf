@@ -1447,6 +1447,18 @@ final class AppCoordinator: NSObject, ObservableObject {
     private func applyConfirmedMove(_ confirmation: MoveConfirmation, to zone: VisibilityZone) {
         itemZones = zones(for: confirmation.items, boundaries: confirmation.boundaries)
         items = confirmation.items
+        // The Items tab groups by overflow evidence too, and no rescan follows
+        // a move. The section is still open here, so a hidden item's frame is
+        // on screen; it leaves the bar once the section rests.
+        let movedID = confirmation.item.id
+        let overflowed = zone == .alwaysHidden ||
+            OverflowClassifier.isOverflowed(frame: confirmation.item.frame, screens: screenGeometries())
+        if overflowed {
+            overflowIDs.insert(movedID)
+        } else {
+            overflowIDs.remove(movedID)
+        }
+        shelfInventory.recordConfirmedPlacement(itemID: movedID, isOverflowed: overflowed)
         store.setRule(for: confirmation.item, zone: zone)
         message = "\(confirmation.item.displayName) is now \(zone.title.lowercased())."
     }

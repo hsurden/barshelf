@@ -30,10 +30,25 @@ jobs:
           SIGN_IDENTITY: "-"
         run: ./scripts/build-app.sh
 
-      - name: Verify app and Sparkle
+      # This fork removed Sparkle so an upstream update can never replace it.
+      - name: Verify app has no upstream updater
         run: |
-          test -d dist/BarShelf.app/Contents/Frameworks/Sparkle.framework
-          codesign --verify --deep --strict --verbose=1 dist/BarShelf.app
+          app=dist/BarShelf.app
+          codesign --verify --deep --strict --verbose=1 "$app"
+          if [ -e "$app/Contents/Frameworks/Sparkle.framework" ]; then
+            echo "::error::Sparkle.framework is bundled"
+            exit 1
+          fi
+          for key in SUFeedURL SUPublicEDKey; do
+            if /usr/libexec/PlistBuddy -c "Print :$key" "$app/Contents/Info.plist" >/dev/null 2>&1; then
+              echo "::error::Info.plist contains the update key $key"
+              exit 1
+            fi
+          done
+          if otool -L "$app/Contents/MacOS/BarShelf" | grep -qi sparkle; then
+            echo "::error::The executable links Sparkle"
+            exit 1
+          fi
 
       - name: Verify launch
         run: |

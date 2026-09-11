@@ -13,7 +13,7 @@ BarShelf always uses the same two names and meanings.
 The Items screen shows both sections at the same time, grouped by where each icon really is, not
 by its saved rule. Selecting an item and pressing the arrow between the columns, or dragging it
 across, moves it immediately through the confirmed move path. The in-bar column reorders the real
-bar by drag. A rule that says Always hidden while macOS keeps drawing the icon is dropped after two
+bar by drag: dropping an item on another row moves it into that row's place. A rule that says Always hidden while macOS keeps drawing the icon is dropped after two
 consecutive scans, so the columns and the shelf never disagree with the bar. There is no separate
 reveal-toggle section and no classic hide-and-reveal mode.
 
